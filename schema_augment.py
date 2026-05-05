@@ -25,12 +25,16 @@ import random
 
 for content in data:
     entity_id_type_map = dict()
+    entity_id_text_map = dict()
     trigger_id_type_map = dict()
+    trigger_id_text_map = dict()
     for entity in content["entity_mentions"]:
         entity_id_type_map[entity["entity_id"]] = entity["entity_type"]
+        entity_id_text_map[entity["entity_id"]] = entity["text"]
 
     for trigger in content["event_triggers"]:
         trigger_id_type_map[trigger["trigger_id"]] = trigger["event_type"]
+        trigger_id_text_map[trigger["trigger_id"]] = trigger["text"]
 
     for arg in content["event_arguments"]:
         entity_type, trigger_type, role_type = (
@@ -38,6 +42,8 @@ for content in data:
             trigger_id_type_map[arg["trigger_id"]],
             arg["role_type"],
         )
+        orig_trigger = trigger_id_text_map[arg["trigger_id"]]
+        orig_entity = entity_id_text_map[arg["entity_id"]]
 
         corpus_by_trigger = entity_event_corpus["event"][trigger_type]
         if role_type not in corpus_by_trigger["entity"] or entity_type not in corpus_by_trigger["entity"][role_type]:
@@ -45,7 +51,12 @@ for content in data:
 
         print("<%s, %s, %s>" % (entity_type, trigger_type, role_type))
         print(
-            "Alternative Trigger: %s" % random.choice(corpus_by_trigger["text"]),
+            "Original Trigger: %s" % orig_trigger,
+            "---",
+            "Alternative Trigger: %s" % random.choice(corpus_by_trigger["text"])
+        )
+        print(
+            "Original Entity: %s" % orig_entity,
             "---",
             "Alternative Entity: %s" % random.choice(corpus_by_trigger["entity"][role_type][entity_type])
         )
