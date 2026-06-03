@@ -3,13 +3,23 @@ import glob
 import sys
 import os
 
+def is_similar_text(t1, t2):
+    t1_c = str(t1).strip().lower()
+    t2_c = str(t2).strip().lower()
+    if not t1_c or not t2_c:
+        return False
+    return (t1_c == t2_c) or (t1_c in t2_c) or (t2_c in t1_c)
+
 def evaluate_extracted_file(extracted_file, gold_file):
     print(f"Evaluating: {extracted_file}")
     print(f"Against gold: {gold_file}\n")
 
     # Load gold data
     gold_data = {}
-    with open(gold_file, "r", encoding="utf-8") as f:
+    import gzip
+    open_func = gzip.open if gold_file.endswith(".gz") else open
+    mode = "rt" if gold_file.endswith(".gz") else "r"
+    with open_func(gold_file, mode, encoding="utf-8") as f:
         for line in f:
             if line.strip():
                 rec = json.loads(line)
@@ -46,131 +56,177 @@ def evaluate_extracted_file(extracted_file, gold_file):
             # -------------------------------------------------------------
             # 1. EMD Evaluation
             # -------------------------------------------------------------
-            gold_entities = set()
-            gold_ent_str = {}
-            for ent in gold_rec.get("entity_mentions", []):
-                tup = (ent["start"], ent["end"], ent["entity_type"])
-                gold_entities.add(tup)
-                gold_ent_str[tup] = f"'{ent.get('text', '')}' ({ent['entity_type']})"
+            gold_ents = gold_rec.get("entity_mentions", [])
+            pred_ents = pred_rec.get("entity_mentions", [])
 
-            pred_entities = set()
-            pred_ent_str = {}
-            for ent in pred_rec.get("entity_mentions", []):
-                tup = (ent["start"], ent["end"], ent["entity_type"])
-                pred_entities.add(tup)
-                pred_ent_str[tup] = f"'{ent.get('text', '')}' ({ent['entity_type']})"
+            matched_gold_ent_indices = set()
+            emd_tp_list = []
+            emd_fp_list = []
 
-            emd_fn = gold_entities - pred_entities
-            emd_fp = pred_entities - gold_entities
-            
-            tp_emd += len(gold_entities.intersection(pred_entities))
-            fp_emd += len(emd_fp)
-            fn_emd += len(emd_fn)
+            for p_idx, p in enumerate(pred_ents):
+                p_text = p.get("text", "")
+                p_type = p.get("entity_type", "")
+                matched = False
+                for g_idx, g in enumerate(gold_ents):
+                    if g_idx in matched_gold_ent_indices:
+                        continue
+                    g_text = g.get("text", "")
+                    g_type = g.get("entity_type", "")
+                    if p_type == g_type and is_similar_text(p_text, g_text):
+                        matched = True
+                        emd_tp_list.append((p, g))
+                        matched_gold_ent_indices.add(g_idx)
+                        break
+                if not matched:
+                    emd_fp_list.append(p)
+
+            emd_fn_list = [g for g_idx, g in enumerate(gold_ents) if g_idx not in matched_gold_ent_indices]
+
+            tp_emd += len(emd_tp_list)
+            fp_emd += len(emd_fp_list)
+            fn_emd += len(emd_fn_list)
 
             # -------------------------------------------------------------
             # 2. ED Evaluation
             # -------------------------------------------------------------
-            gold_events = set()
-            gold_ev_str = {}
-            for ev in gold_rec.get("event_mentions", []):
-                trig = ev.get("trigger", {})
-                tup = (trig.get("start"), trig.get("end"), ev["event_type"])
-                gold_events.add(tup)
-                gold_ev_str[tup] = f"'{trig.get('text', '')}' ({ev['event_type']})"
+            gold_events = gold_rec.get("event_mentions", [])
+            pred_events = pred_rec.get("event_mentions", [])
 
-            pred_events = set()
-            pred_ev_str = {}
-            for ev in pred_rec.get("event_mentions", []):
-                trig = ev.get("trigger", {})
-                tup = (trig.get("start"), trig.get("end"), ev["event_type"])
-                pred_events.add(tup)
-                pred_ev_str[tup] = f"'{trig.get('text', '')}' ({ev['event_type']})"
+            matched_gold_ev_indices = set()
+            ed_tp_list = []
+            ed_fp_list = []
 
-            ed_fn = gold_events - pred_events
-            ed_fp = pred_events - gold_events
+            for p_idx, p in enumerate(pred_events):
+                p_type = p.get("event_type", "")
+                p_trig = p.get("trigger", {}).get("text", "")
+                matched = False
+                for g_idx, g in enumerate(gold_events):
+                    if g_idx in matched_gold_ev_indices:
+                        continue
+                    g_type = g.get("event_type", "")
+                    g_trig = g.get("trigger", {}).get("text", "")
+                    if p_type == g_type and is_similar_text(p_trig, g_trig):
+                        matched = True
+                        ed_tp_list.append((p, g))
+                        matched_gold_ev_indices.add(g_idx)
+                        break
+                if not matched:
+                    ed_fp_list.append(p)
 
-            tp_ed += len(gold_events.intersection(pred_events))
-            fp_ed += len(ed_fp)
-            fn_ed += len(ed_fn)
+            ed_fn_list = [g for g_idx, g in enumerate(gold_events) if g_idx not in matched_gold_ev_indices]
+
+            tp_ed += len(ed_tp_list)
+            fp_ed += len(ed_fp_list)
+            fn_ed += len(ed_fn_list)
 
             # -------------------------------------------------------------
             # 3. EAE Evaluation
             # -------------------------------------------------------------
-            gold_ent_lookup = {ent["id"]: ent for ent in gold_rec.get("entity_mentions", [])}
-            gold_args = set()
-            gold_arg_str = {}
-            for ev in gold_rec.get("event_mentions", []):
+            gold_args = []
+            gold_ent_lookup = {ent["id"]: ent for ent in gold_ents}
+            for ev in gold_events:
                 ev_type = ev["event_type"]
                 trig_text = ev.get("trigger", {}).get("text", "")
                 for arg in ev.get("arguments", []):
                     ent_id = arg["entity_id"]
                     gold_ent = gold_ent_lookup.get(ent_id)
                     if gold_ent:
-                        tup = (ev_type, gold_ent["start"], gold_ent["end"], arg["role"])
-                        gold_args.add(tup)
-                        gold_arg_str[tup] = f"Event: '{trig_text}' ({ev_type}) -> Arg: '{gold_ent.get('text','')}' [{arg['role']}]"
+                        gold_args.append({
+                            "event_type": ev_type,
+                            "trig_text": trig_text,
+                            "role": arg["role"],
+                            "text": gold_ent.get("text", "")
+                        })
 
-            pred_ent_lookup = {ent["id"]: ent for ent in pred_rec.get("entity_mentions", [])}
-            pred_args = set()
-            pred_arg_str = {}
-            for ev in pred_rec.get("event_mentions", []):
+            pred_args = []
+            pred_ent_lookup = {ent["id"]: ent for ent in pred_ents}
+            for ev in pred_events:
                 ev_type = ev["event_type"]
                 trig_text = ev.get("trigger", {}).get("text", "")
                 for arg in ev.get("arguments", []):
                     ent_id = arg["entity_id"]
                     pred_ent = pred_ent_lookup.get(ent_id)
                     if pred_ent:
-                        tup = (ev_type, pred_ent["start"], pred_ent["end"], arg["role"])
-                        pred_args.add(tup)
-                        pred_arg_str[tup] = f"Event: '{trig_text}' ({ev_type}) -> Arg: '{pred_ent.get('text','')}' [{arg['role']}]"
+                        pred_args.append({
+                            "event_type": ev_type,
+                            "trig_text": trig_text,
+                            "role": arg["role"],
+                            "text": pred_ent.get("text", "")
+                        })
 
-            eae_fn = gold_args - pred_args
-            eae_fp = pred_args - gold_args
+            matched_gold_arg_indices = set()
+            eae_tp_list = []
+            eae_fp_list = []
 
-            tp_eae += len(gold_args.intersection(pred_args))
-            fp_eae += len(eae_fp)
-            fn_eae += len(eae_fn)
+            for p_idx, p in enumerate(pred_args):
+                p_ev_type = p["event_type"]
+                p_role = p["role"]
+                p_text = p["text"]
+                matched = False
+                for g_idx, g in enumerate(gold_args):
+                    if g_idx in matched_gold_arg_indices:
+                        continue
+                    g_ev_type = g["event_type"]
+                    g_role = g["role"]
+                    g_text = g["text"]
+                    if p_ev_type == g_ev_type and p_role == g_role and is_similar_text(p_text, g_text):
+                        matched = True
+                        eae_tp_list.append((p, g))
+                        matched_gold_arg_indices.add(g_idx)
+                        break
+                if not matched:
+                    eae_fp_list.append(p)
+
+            eae_fn_list = [g for g_idx, g in enumerate(gold_args) if g_idx not in matched_gold_arg_indices]
+
+            tp_eae += len(eae_tp_list)
+            fp_eae += len(eae_fp_list)
+            fn_eae += len(eae_fn_list)
 
             # --- WRITE LOG ---
             out.write(f"Doc ID: {sent_id}\n")
             out.write(f"Sentence: {sentence}\n\n")
 
             out.write("  [EMD - Entities]\n")
-            out.write("    GROUND TRUTH: " + (", ".join([gold_ent_str[t] for t in gold_entities]) if gold_entities else "None") + "\n")
-            out.write("    PREDICTED: " + (", ".join([pred_ent_str[t] for t in pred_entities]) if pred_entities else "None") + "\n")
-            if emd_fn:
-                out.write("    MISSING (FN): " + ", ".join([gold_ent_str[t] for t in emd_fn]) + "\n")
-            if emd_fp:
-                out.write("    INCORRECT/EXTRA (FP): " + ", ".join([pred_ent_str[t] for t in emd_fp]) + "\n")
+            out.write("    GROUND TRUTH: " + (", ".join([f"'{g['text']}' ({g['entity_type']})" for g in gold_ents]) if gold_ents else "None") + "\n")
+            out.write("    PREDICTED: " + (", ".join([f"'{p['text']}' ({p['entity_type']})" for p in pred_ents]) if pred_ents else "None") + "\n")
+            if emd_fn_list:
+                out.write("    MISSING (FN): " + ", ".join([f"'{g['text']}' ({g['entity_type']})" for g in emd_fn_list]) + "\n")
+            if emd_fp_list:
+                out.write("    INCORRECT/EXTRA (FP): " + ", ".join([f"'{p['text']}' ({p['entity_type']})" for p in emd_fp_list]) + "\n")
             out.write("\n")
 
             out.write("  [ED - Event Triggers]\n")
-            out.write("    GROUND TRUTH: " + (", ".join([gold_ev_str[t] for t in gold_events]) if gold_events else "None") + "\n")
-            out.write("    PREDICTED: " + (", ".join([pred_ev_str[t] for t in pred_events]) if pred_events else "None") + "\n")
-            if ed_fn:
-                out.write("    MISSING (FN): " + ", ".join([gold_ev_str[t] for t in ed_fn]) + "\n")
-            if ed_fp:
-                out.write("    INCORRECT/EXTRA (FP): " + ", ".join([pred_ev_str[t] for t in ed_fp]) + "\n")
+            out.write("    GROUND TRUTH: " + (", ".join([f"'{g.get('trigger', {}).get('text', '')}' ({g['event_type']})" for g in gold_events]) if gold_events else "None") + "\n")
+            out.write("    PREDICTED: " + (", ".join([f"'{p.get('trigger', {}).get('text', '')}' ({p['event_type']})" for p in pred_events]) if pred_events else "None") + "\n")
+            if ed_fn_list:
+                out.write("    MISSING (FN): " + ", ".join([f"'{g.get('trigger', {}).get('text', '')}' ({g['event_type']})" for g in ed_fn_list]) + "\n")
+            if ed_fp_list:
+                out.write("    INCORRECT/EXTRA (FP): " + ", ".join([f"'{p.get('trigger', {}).get('text', '')}' ({p['event_type']})" for p in ed_fp_list]) + "\n")
             out.write("\n")
 
             out.write("  [EAE - Arguments]\n")
             if gold_args:
                 out.write("    GROUND TRUTH:\n")
-                for t in gold_args: out.write(f"      - {gold_arg_str[t]}\n")
+                for g in gold_args:
+                    out.write(f"      - Event: '{g['trig_text']}' ({g['event_type']}) -> Arg: '{g['text']}' [{g['role']}]\n")
             else:
                 out.write("    GROUND TRUTH: None\n")
             if pred_args:
                 out.write("    PREDICTED:\n")
-                for t in pred_args: out.write(f"      - {pred_arg_str[t]}\n")
+                for p in pred_args:
+                    out.write(f"      - Event: '{p['trig_text']}' ({p['event_type']}) -> Arg: '{p['text']}' [{p['role']}]\n")
             else:
                 out.write("    PREDICTED: None\n")
             
-            if eae_fn:
+            if eae_fn_list:
                 out.write("    MISSING (FN):\n")
-                for t in eae_fn: out.write(f"      - {gold_arg_str[t]}\n")
-            if eae_fp:
+                for g in eae_fn_list:
+                    out.write(f"      - Event: '{g['trig_text']}' ({g['event_type']}) -> Arg: '{g['text']}' [{g['role']}]\n")
+            if eae_fp_list:
                 out.write("    INCORRECT/EXTRA (FP):\n")
-                for t in eae_fp: out.write(f"      - {pred_arg_str[t]}\n")
+                for p in eae_fp_list:
+                    out.write(f"      - Event: '{p['trig_text']}' ({p['event_type']}) -> Arg: '{p['text']}' [{p['role']}]\n")
             out.write("\n")
 
             out.write(f"{'-'*80}\n")
@@ -215,7 +271,9 @@ def get_latest_extracted_file():
     return max(valid_files, key=os.path.getmtime)
 
 if __name__ == "__main__":
-    gold_file = "final_data/processed_enriched_3/train.json"
+    gold_file = "final_data/processed_enriched_3/train.json.gz"
+    if not os.path.exists(gold_file):
+        gold_file = "final_data/processed_enriched_3/train.json"
     
     if len(sys.argv) > 1:
         extracted_file = sys.argv[1]
