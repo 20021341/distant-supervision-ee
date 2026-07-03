@@ -7,3 +7,4 @@ test.ipynb
 .env
 *.bak
 .DS_Store
+checkpoints/
