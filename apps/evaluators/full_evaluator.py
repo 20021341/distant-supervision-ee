@@ -38,8 +38,9 @@ class FullEvaluator:
                 logger.error(f"Error during batch event extraction: {e}")
                 pred_items = [[] for _ in sentences]
         else:
+            from tqdm import tqdm
             pred_items = []
-            for idx, record in enumerate(records):
+            for idx, record in enumerate(tqdm(records, desc="Evaluating")):
                 try:
                     pred_items.append(self.extractor.extract(record.sentence))
                 except Exception as e:

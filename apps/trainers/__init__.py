@@ -3,5 +3,5 @@ from .inference_models import (
     EntityExtractorModel,
     EventExtractorModel,
     ArgumentAssignerModel,
-    FullPipelineModel
+    FullModel
 )

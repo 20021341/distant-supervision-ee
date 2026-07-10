@@ -166,6 +166,37 @@ def build_data(phase: str, n_jobs: int):
             raise ValueError(f"Invalid build phase: {phase}")
 
 
+def run_training(phase: str, model_name: str, epochs: int, save_steps: int, max_seq_length: int, finetune_type: str, continue_run: str = None):
+    print(f"=== Starting Training for phase: {phase} ===")
+    print(f"Base Model: {model_name}")
+    print(f"Finetune Type: {finetune_type}")
+    print(f"Epochs: {epochs}, Save Steps: {save_steps}")
+    if continue_run:
+        print(f"Resuming Run: {continue_run}")
+    
+    if phase == "entity":
+        train_dataset = load_entity_reasoning_dataset("train")
+    elif phase == "event":
+        train_dataset = load_event_reasoning_dataset("train")
+    elif phase == "argument":
+        train_dataset = load_argument_reasoning_dataset("train")
+    elif phase == "full":
+        train_dataset = load_full_reasoning_dataset("train")
+    else:
+        raise ValueError(f"Invalid training phase: {phase}")
+        
+    from apps.trainers.trainer import Trainer
+    trainer = Trainer(model_name=model_name, max_seq_length=max_seq_length, finetune_type=finetune_type)
+    finetuned_model = trainer.train(
+        dataset=train_dataset,
+        phase=phase,
+        epochs=epochs,
+        save_steps=save_steps,
+        continue_run=continue_run
+    )
+    print(f"Successfully trained and loaded finetuned model: {finetuned_model}")
+
+
 def main():
     parser = argparse.ArgumentParser(description="EE Distant Supervision Main Runner")
     parser.add_argument(
@@ -179,11 +210,63 @@ def main():
         default=5,
         help="Number of parallel workers for builder queries (default: 5)"
     )
+    parser.add_argument(
+        "--train",
+        choices=["entity", "event", "argument", "full"],
+        help="Select the phase to train: entity, event, argument, or full"
+    )
+    parser.add_argument(
+        "--model_name",
+        type=str,
+        default="Qwen/Qwen3-4B-Instruct-2507",
+        help="Base model to finetune (default: Qwen/Qwen3-4B-Instruct-2507)"
+    )
+    parser.add_argument(
+        "--epochs",
+        type=int,
+        default=2,
+        help="Number of training epochs (default: 2)"
+    )
+    parser.add_argument(
+        "--save_steps",
+        type=int,
+        default=500,
+        help="Save steps interval (default: 500)"
+    )
+    parser.add_argument(
+        "--max_seq_length",
+        type=int,
+        default=2048,
+        help="Maximum sequence length (default: 2048)"
+    )
+    parser.add_argument(
+        "--finetune_type",
+        choices=["lora", "full"],
+        default="lora",
+        help="Finetuning type: lora or full (default: lora)"
+    )
+    parser.add_argument(
+        "--continue",
+        dest="continue_run",
+        type=str,
+        default=None,
+        help="Continue training from a run folder name or path (e.g. run--2026-07-09--09-34-18)"
+    )
     
     args = parser.parse_args()
     
     if args.build_data:
         build_data(args.build_data, args.n_jobs)
+    elif args.train:
+        run_training(
+            phase=args.train,
+            model_name=args.model_name,
+            epochs=args.epochs,
+            save_steps=args.save_steps,
+            max_seq_length=args.max_seq_length,
+            finetune_type=args.finetune_type,
+            continue_run=args.continue_run
+        )
     else:
         parser.print_help()
 

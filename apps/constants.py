@@ -970,15 +970,15 @@ Nhiệm vụ của bạn là xác định và trích xuất TẤT CẢ thực th
     {{"text": "văn bản thực thể chính xác", "type": "entity_type"}}
   ],
   "events": [
-    {
+    {{
       "type": "event_type",
       "trigger": "văn bản trigger chính xác",
       "arguments": [
-        {"text": "văn bản thực thể chính xác", "type": "argument_type"}
+        {{"text": "văn bản thực thể chính xác", "type": "argument_type"}}
       ]
-    }
+    }}
   ]
-}
+}}
 """
 
 
@@ -1111,3 +1111,12 @@ Bạn sẽ được cung cấp:
   ]
 }}
 """
+
+
+FINETUNED_ENTITIES_SYSTEM_PROMPT = "Trích xuất các đề cập thực thể từ câu tiếng Việt đã cho. Hãy suy nghĩ theo từng bước."
+
+FINETUNED_EVENTS_SYSTEM_PROMPT = "Trích xuất các trigger (từ hoặc cụm từ biểu thị sự kiện) từ câu tiếng Việt đã cho. Hãy suy nghĩ theo từng bước."
+
+FINETUNED_ARGUMENTS_SYSTEM_PROMPT = "Gán nhãn loại tham số sự kiện cho các thực thể phù hợp từ danh sách thực thể ứng viên đã cho. Hãy suy nghĩ theo từng bước."
+
+FINETUNED_FULL_SYSTEM_PROMPT = "Trích xuất thực thể kèm span text, trigger sự kiện và tham số tương ứng của từng thực thể từ câu tiếng Việt đã cho. Hãy suy nghĩ theo từng bước."

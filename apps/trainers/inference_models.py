@@ -11,6 +11,12 @@ from apps.extractors.entity_extractor import EntityExtractor
 from apps.extractors.event_extractor import EventExtractor
 from apps.extractors.argument_assigner import ArgumentAssigner
 from apps.extractors.full_extractor import FullExtractor
+from apps.constants import (
+    FINETUNED_ENTITIES_SYSTEM_PROMPT,
+    FINETUNED_EVENTS_SYSTEM_PROMPT,
+    FINETUNED_ARGUMENTS_SYSTEM_PROMPT,
+    FINETUNED_FULL_SYSTEM_PROMPT
+)
 
 from apps.evaluators.entity_evaluator import EntityEvaluator
 from apps.evaluators.event_evaluator import EventEvaluator
@@ -66,7 +72,7 @@ class FinetunedModel:
                 self.model = self.model.to("mps")
             self.model.eval()
 
-    def _llm_call(self, system_prompt: str, user_prompt: str, **kwargs) -> Dict[str, Any]:
+    def _llm_call(self, system_prompt: str, user_prompt: str, **kwargs) -> Tuple[str, Dict[str, Any]]:
         messages = [
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": user_prompt}
@@ -87,7 +93,7 @@ class FinetunedModel:
             prompt_len = inputs["input_ids"].shape[1]
             out_str = self.tokenizer.decode(outputs[0][prompt_len:], skip_special_tokens = True)
             
-        return parse_llm_json(out_str)
+        return out_str, parse_llm_json(out_str)
 
     def unload(self):
         if hasattr(self, "model") and self.model is not None:
@@ -118,7 +124,7 @@ class FinetunedModel:
 class EntityExtractorModel(FinetunedModel):
     def __init__(self, checkpoint: str, max_seq_length: int = 2048):
         super().__init__(checkpoint, max_seq_length)
-        self.extractor = EntityExtractor(llm_caller_func=self._llm_call, few_shot=False)
+        self.extractor = EntityExtractor(llm_caller_func=self._llm_call, system_prompt=FINETUNED_ENTITIES_SYSTEM_PROMPT)
         self.evaluator = EntityEvaluator(extractor=self.extractor)
 
     def infer(self, sentence: str) -> List[ExtractedEntity]:
@@ -131,7 +137,7 @@ class EntityExtractorModel(FinetunedModel):
 class EventExtractorModel(FinetunedModel):
     def __init__(self, checkpoint: str, max_seq_length: int = 2048):
         super().__init__(checkpoint, max_seq_length)
-        self.extractor = EventExtractor(llm_caller_func=self._llm_call, few_shot=False)
+        self.extractor = EventExtractor(llm_caller_func=self._llm_call, system_prompt=FINETUNED_EVENTS_SYSTEM_PROMPT)
         self.evaluator = EventEvaluator(extractor=self.extractor)
 
     def infer(self, sentence: str) -> List[ExtractedEvent]:
@@ -144,7 +150,7 @@ class EventExtractorModel(FinetunedModel):
 class ArgumentAssignerModel(FinetunedModel):
     def __init__(self, checkpoint: str, max_seq_length: int = 2048):
         super().__init__(checkpoint, max_seq_length)
-        self.assigner = ArgumentAssigner(llm_caller_func=self._llm_call, few_shot=False)
+        self.assigner = ArgumentAssigner(llm_caller_func=self._llm_call, system_prompt=FINETUNED_ARGUMENTS_SYSTEM_PROMPT)
         self.evaluator = ArgumentEvaluator(assigner=self.assigner)
 
     def infer(self, sentence: str, event: ExtractedEvent, entities: List[ExtractedEntity]) -> Optional[AssignedEvent]:
@@ -154,10 +160,10 @@ class ArgumentAssignerModel(FinetunedModel):
         return self.evaluator.evaluate(**kwargs)
 
 
-class FullPipelineModel(FinetunedModel):
+class FullModel(FinetunedModel):
     def __init__(self, checkpoint: str, max_seq_length: int = 2048):
         super().__init__(checkpoint, max_seq_length)
-        self.extractor = FullExtractor(llm_caller_func=self._llm_call, few_shot=False)
+        self.extractor = FullExtractor(llm_caller_func=self._llm_call, system_prompt=FINETUNED_FULL_SYSTEM_PROMPT)
         self.evaluator = FullEvaluator(extractor=self.extractor)
 
     def infer(self, sentence: str) -> Optional[PredictedItem]:

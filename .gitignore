@@ -8,3 +8,5 @@ test.ipynb
 *.bak
 .DS_Store
 checkpoints/
+*cache/
+dataset/

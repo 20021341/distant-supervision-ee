@@ -38,8 +38,9 @@ class EntityEvaluator:
                 logger.error(f"Error during batch entity extraction: {e}")
                 pred_entities_list = [[] for _ in sentences]
         else:
+            from tqdm import tqdm
             pred_entities_list = []
-            for idx, record in enumerate(records):
+            for idx, record in enumerate(tqdm(records, desc="Evaluating")):
                 try:
                     pred_entities_list.append(self.extractor.extract(record.sentence))
                 except Exception as e:

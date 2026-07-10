@@ -25,8 +25,13 @@ class FullExtractor:
         if getattr(self, "_initialized", False):
             return
 
-        self.few_shot = kwargs.get("few_shot", True)
-        self.system_prompt = build_full_system_prompt(self.few_shot)
+        system_prompt = kwargs.get("system_prompt", None)
+        if system_prompt is not None:
+            self.system_prompt = system_prompt
+        else:
+            self.few_shot = kwargs.get("few_shot", True)
+            self.system_prompt = build_full_system_prompt(self.few_shot)
+            
         if not hasattr(self, "llm_caller_func"):
             self.llm_caller_func = call_llm_json
         self._initialized = True

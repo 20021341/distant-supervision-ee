@@ -16,6 +16,12 @@ from apps.helpers.prompt_builder import (
     build_arguments_user_prompt,
     build_full_system_prompt
 )
+from apps.constants import (
+    FINETUNED_ENTITIES_SYSTEM_PROMPT,
+    FINETUNED_EVENTS_SYSTEM_PROMPT,
+    FINETUNED_ARGUMENTS_SYSTEM_PROMPT,
+    FINETUNED_FULL_SYSTEM_PROMPT
+)
 
 def convert_to_train_dataset(
     dataset: Union[EntityReasoningDataset, EventReasoningDataset, ArgumentReasoningDataset, FullReasoningDataset], 
@@ -27,7 +33,7 @@ def convert_to_train_dataset(
     texts = []
 
     if phase == "entity":
-        sys_prompt = build_entities_system_prompt()
+        sys_prompt = FINETUNED_ENTITIES_SYSTEM_PROMPT
         for item in dataset:
             sentence = item.sentence
             entities_list = [{"text": ent.text, "type": ent.type.value if hasattr(ent.type, 'value') else ent.type} for ent in item.entities]
@@ -46,7 +52,7 @@ def convert_to_train_dataset(
             texts.append(text)
 
     elif phase == "event":
-        sys_prompt = build_events_system_prompt()
+        sys_prompt = FINETUNED_EVENTS_SYSTEM_PROMPT
         for item in dataset:
             sentence = item.sentence
             events_list = [{"trigger": ev.trigger, "type": ev.type.value if hasattr(ev.type, 'value') else ev.type} for ev in item.events]
@@ -65,7 +71,7 @@ def convert_to_train_dataset(
             texts.append(text)
 
     elif phase == "argument":
-        sys_prompt = build_arguments_system_prompt()
+        sys_prompt = FINETUNED_ARGUMENTS_SYSTEM_PROMPT
         for item in dataset:
             sentence = item.sentence
             event_input = ExtractedEvent(
@@ -94,7 +100,7 @@ def convert_to_train_dataset(
             texts.append(text)
 
     elif phase == "full":
-        sys_prompt = build_full_system_prompt()
+        sys_prompt = FINETUNED_FULL_SYSTEM_PROMPT
         for item in dataset:
             sentence = item.sentence
             entities_list = [{"type": ent.type.value if hasattr(ent.type, 'value') else ent.type, "text": ent.text} for ent in item.entities]

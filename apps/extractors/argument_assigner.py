@@ -25,7 +25,12 @@ class ArgumentAssigner:
         if getattr(self, "_initialized", False):
             return
 
-        self.system_prompt = build_arguments_system_prompt()
+        system_prompt = kwargs.get("system_prompt", None)
+        if system_prompt is not None:
+            self.system_prompt = system_prompt
+        else:
+            self.system_prompt = build_arguments_system_prompt()
+            
         if not hasattr(self, "llm_caller_func"):
             self.llm_caller_func = call_llm_json
         self._initialized = True

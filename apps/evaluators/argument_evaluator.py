@@ -66,8 +66,9 @@ class ArgumentEvaluator:
                 logger.error(f"Error during batch argument assignment: {e}")
                 pred_events = [None for _ in tasks]
         else:
+            from tqdm import tqdm
             pred_events = []
-            for task in tasks:
+            for task in tqdm(tasks, desc="Evaluating"):
                 sentence, event_input, candidate_entities = task
                 try:
                     pred_events.append(self.assigner.assign(sentence, event_input, candidate_entities))

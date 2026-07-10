@@ -68,8 +68,9 @@ class parallel_batch:
                         future = executor.submit(self.func, instance, item, **kwargs)
                     future_to_index[future] = idx
                 
+                from tqdm import tqdm
                 results_indexed = [None] * len(items)
-                for future in as_completed(future_to_index):
+                for future in tqdm(as_completed(future_to_index), total=len(items), desc="Processing batch", leave=True):
                     idx = future_to_index[future]
                     result = future.result()
                     results_indexed[idx] = result

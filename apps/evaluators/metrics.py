@@ -118,12 +118,37 @@ def _compute_tp_fp_fn_values(
         pred_extracted_events = [ExtractedEvent(trigger=ev.trigger, type=ev.type) for ev in pred_events if ev is not None]
         tp_events, fp_events, fn_events = _compute_tp_fp_fn_values(pred_extracted_events, gold_events, "event")
 
-        tp_args, fp_args, fn_args = 0, 0, 0
-        for pred_event, gold_event in zip(pred_events, gold_events):
-            _tp, _fp, _fn = _compute_tp_fp_fn_values(pred_event, gold_event, "argument")
-            tp_args += _tp
-            fp_args += _fp
-            fn_args += _fn
+        tp_args, fp_args, fn_args = 0.0, 0.0, 0.0
+        aligned_gold_indices = set()
+        for p_ev in pred_events:
+            if p_ev is None:
+                continue
+            p_type = p_ev.type
+            p_trig = p_ev.trigger
+            
+            # Find matching gold event
+            best_g_idx = None
+            for g_idx, g_ev in enumerate(gold_events):
+                if g_idx in aligned_gold_indices:
+                    continue
+                if str(p_type).lower() == str(g_ev.type).lower() and is_similar_text(p_trig, g_ev.trigger):
+                    best_g_idx = g_idx
+                    break
+            
+            if best_g_idx is not None:
+                aligned_gold_indices.add(best_g_idx)
+                _tp, _fp, _fn = _compute_tp_fp_fn_values(p_ev, gold_events[best_g_idx], "argument")
+                tp_args += _tp
+                fp_args += _fp
+                fn_args += _fn
+            else:
+                # All arguments in this predicted event are false positives
+                fp_args += len(p_ev.arguments) if p_ev.arguments is not None else 0
+                
+        # Remaining unaligned gold events have all their arguments as false negatives
+        for g_idx, g_ev in enumerate(gold_events):
+            if g_idx not in aligned_gold_indices:
+                fn_args += len(g_ev.arguments) if g_ev.arguments is not None else 0
 
         # Combine EMD, ED, and EAE counts
         tp_total = tp_ents + tp_events + tp_args
