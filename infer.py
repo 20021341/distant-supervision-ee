@@ -1,5 +1,6 @@
 import argparse
 import sys
+from pathlib import Path
 from apps.trainers.inference_models import FullModel
 
 def main():
@@ -7,7 +8,7 @@ def main():
     parser.add_argument(
         "--checkpoint",
         type=str,
-        default="/Users/dagoras/Documents/workspace/distant-supervision-ee/checkpoints/run--2026-07-09--09-34-18/final",
+        default=str(Path(__file__).resolve().parent / "checkpoints" / "run--2026-07-09--09-34-18" / "final"),
         help="Path to the finetuned model directory (default: latest run final/)"
     )
     parser.add_argument(

@@ -50,7 +50,7 @@ class FinetunedModel:
                 model_name = checkpoint,
                 max_seq_length = max_seq_length,
                 dtype = None,
-                load_in_4bit = False,
+                load_in_4bit = True,
             )
             FastLanguageModel.for_inference(self.model)
         else:
