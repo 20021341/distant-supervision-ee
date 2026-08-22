@@ -28,7 +28,9 @@ class EntityExtractor:
         if system_prompt is not None:
             self.system_prompt = system_prompt
         else:
-            self.system_prompt = build_entities_system_prompt()
+            include_hints = kwargs.get("include_hints", True)
+            few_shot = kwargs.get("few_shot", False)
+            self.system_prompt = build_entities_system_prompt(include_hints=include_hints, few_shot=few_shot)
             
         if not hasattr(self, "llm_caller_func"):
             self.llm_caller_func = call_llm_json

@@ -47,6 +47,10 @@ class FullEvaluator:
                     logger.error(f"Error extracting events for record {idx}: {e}")
                     pred_items.append([])
 
+        self.last_sentences = [record.sentence for record in records]
+        self.last_predictions = pred_items
+        self.last_gold = records
+
         precision = Precision("full").compute(pred_items, records)
         recall = Recall("full").compute(pred_items, records)
         f1 = F1Score("full").compute(pred_items, records)

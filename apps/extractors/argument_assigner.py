@@ -26,25 +26,27 @@ class ArgumentAssigner:
             return
 
         system_prompt = kwargs.get("system_prompt", None)
+        self.include_hints = kwargs.get("include_hints", True)
         if system_prompt is not None:
             self.system_prompt = system_prompt
         else:
-            self.system_prompt = build_arguments_system_prompt()
-            
+            few_shot = kwargs.get("few_shot", False)
+            self.system_prompt = build_arguments_system_prompt(few_shot=few_shot)
+
         if not hasattr(self, "llm_caller_func"):
             self.llm_caller_func = call_llm_json
         self._initialized = True
 
     @parallel_batch(max_workers=5)
     def assign(
-        self, 
+        self,
         sentence: str,
         event: ExtractedEvent,
         entities: List[ExtractedEntity]
     ) -> Optional[AssignedEvent]:
         try:
             user_prompt = build_arguments_user_prompt(
-                sentence, event, entities
+                sentence, event, entities, include_hints=self.include_hints
             )
             raw_answer, result = self.llm_caller_func(
                 system_prompt=self.system_prompt,

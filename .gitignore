@@ -5,8 +5,11 @@ test.txt
 .ruff_cache/
 test.ipynb
 .env
+.venv/
 *.bak
 .DS_Store
 checkpoints/
 *cache/
 dataset/
+eval_outputs/
+eval_results.csv

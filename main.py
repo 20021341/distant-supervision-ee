@@ -166,6 +166,24 @@ def build_data(phase: str, n_jobs: int):
             raise ValueError(f"Invalid build phase: {phase}")
 
 
+def run_eval(eval_model: str, sample: float, n_jobs: int, options: list, csv_output: str):
+    include_hints = "include_hints" in options
+    few_shot = "few_shot" in options
+
+    print(f"=== Starting Evaluation for model: {eval_model} ===")
+    print(f"Sample rate: {sample}, n_jobs: {n_jobs}, include_hints: {include_hints}, few_shot: {few_shot}")
+
+    from apps.evaluators.eval_runner import run_evaluation
+    run_evaluation(
+        eval_model=eval_model,
+        sample=sample,
+        n_jobs=n_jobs,
+        include_hints=include_hints,
+        few_shot=few_shot,
+        csv_path=csv_output,
+    )
+
+
 def run_training(phase: str, model_name: str, epochs: int, save_steps: int, max_seq_length: int, finetune_type: str, continue_run: str = None):
     print(f"=== Starting Training for phase: {phase} ===")
     print(f"Base Model: {model_name}")
@@ -252,11 +270,45 @@ def main():
         default=None,
         help="Continue training from a run folder name or path (e.g. run--2026-07-09--09-34-18)"
     )
-    
+    parser.add_argument(
+        "--eval_model",
+        type=str,
+        default=None,
+        help="Model to evaluate: an OpenRouter model identifier, or an absolute/relative path to a finetuned checkpoint"
+    )
+    parser.add_argument(
+        "--sample",
+        type=float,
+        default=1.0,
+        help="Sample rate of the test set to evaluate, as a float ratio in (0, 1] (default: 1.0)"
+    )
+    parser.add_argument(
+        "--options",
+        nargs="*",
+        choices=["include_hints", "few_shot"],
+        default=[],
+        help="Extra system prompt options for OpenRouter-based evaluation: include_hints and/or few_shot "
+             "(ignored for local finetuned checkpoints, which always use their fixed finetuned system prompt)"
+    )
+    parser.add_argument(
+        "--csv_output",
+        type=str,
+        default="eval_results.csv",
+        help="Path to the CSV file eval results are appended to (default: eval_results.csv)"
+    )
+
     args = parser.parse_args()
-    
+
     if args.build_data:
         build_data(args.build_data, args.n_jobs)
+    elif args.eval_model:
+        run_eval(
+            eval_model=args.eval_model,
+            sample=args.sample,
+            n_jobs=args.n_jobs,
+            options=args.options,
+            csv_output=args.csv_output
+        )
     elif args.train:
         run_training(
             phase=args.train,

@@ -4,7 +4,6 @@ from apps.extractors.argument_assigner import ArgumentAssigner
 from apps.evaluators.metrics import Precision, Recall, F1Score
 from apps.helpers.dataset_loader import load_base_dataset
 from apps.models import Dataset, ExtractedEntity, ExtractedEvent
-import itertools
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -31,15 +30,16 @@ class ArgumentEvaluator:
         records = records[:sample]
         logger.info(f"Evaluating argument assignment on {len(records)} records...")
         
-        # Collect all tasks to run in batch
+        # Collect all tasks to run in batch, keeping gold events aligned 1:1 with tasks
         tasks = []
+        gold_events = []
 
         for idx, record in enumerate(records):
             sentence = record.sentence
-            gold_events = record.events
+            record_gold_events = record.events
             gold_entities = record.entities
 
-            if not gold_events or not gold_entities:
+            if not record_gold_events or not gold_entities:
                 continue
 
             # Format candidate entities to match extractor interface
@@ -48,12 +48,13 @@ class ArgumentEvaluator:
                 for entity in gold_entities
             ]
 
-            for event in gold_events:
+            for event in record_gold_events:
                 event_input = ExtractedEvent(
                     type=event.type,
                     trigger=event.trigger
                 )
                 tasks.append((sentence, event_input, candidate_entities))
+                gold_events.append(event)
 
         if not tasks:
             logger.info("No argument assignment tasks found to evaluate.")
@@ -76,7 +77,9 @@ class ArgumentEvaluator:
                     logger.error(f"Error assigning arguments for event {event_input}: {e}")
                     pred_events.append(None)
 
-        gold_events = list(itertools.chain(*[record.events for record in records]))
+        self.last_sentences = [task[0] for task in tasks]
+        self.last_predictions = pred_events
+        self.last_gold = gold_events
 
         precision = Precision("argument").compute(pred_events, gold_events)
         recall = Recall("argument").compute(pred_events, gold_events)

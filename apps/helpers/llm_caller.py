@@ -65,3 +65,22 @@ def call_llm_json(system_prompt: str, user_prompt: str, **kwargs) -> Tuple[str, 
     )
 
     return response.choices[0].message.content, parse_llm_json(response.choices[0].message.content)
+
+
+def make_llm_caller(model: str):
+    """Builds a call_llm_json-compatible function bound to a specific OpenRouter model identifier."""
+
+    @retry(max_attempts=3)
+    def _call(system_prompt: str, user_prompt: str, **kwargs) -> Tuple[str, Dict[str, Any]]:
+        response = CLIENT.chat.completions.create(
+            model=model,
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt}
+            ],
+            extra_body=kwargs
+        )
+
+        return response.choices[0].message.content, parse_llm_json(response.choices[0].message.content)
+
+    return _call

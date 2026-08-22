@@ -14,7 +14,6 @@ ENTITY_TYPES = {
     "Job": "Chức danh nghề nghiệp, vị trí công tác, nghề nghiệp hoặc vai trò chính thức của một cá nhân trong xã hội hoặc tổ chức.\n\nVí dụ:\n- Tổng thống\n- Thủ tướng\n- Bộ trưởng\n- Giám đốc\n- Cảnh sát trưởng\n- Tài xế\n- Bác sĩ\n- Nông dân\n\nLƯU Ý: Tránh bao gồm cả tên người đi kèm với chức danh nghề nghiệp khi không cần thiết, nếu tên người và chức danh nghề nghiệp được nhắc đến ở 2 span khác nhau thì có thể tách biệt."
 }
 
-
 EVENT_TYPES = {
     "Life:Be-Born": "Một người được sinh ra.\n- Ví dụ: sinh ra, chào đời, lọt lòng, hạ sinh.\n- Lưu ý: Trích xuất cả các từ ngữ văn chương hoặc trang trọng biểu thị việc một cá nhân bắt đầu cuộc sống.",
     "Life:Marry": "Hai người kết hôn hợp pháp hoặc tổ chức đám cưới.\n- Ví dụ: kết hôn, đám cưới, lấy vợ, lấy chồng, lập gia đình, thành hôn, vu quy.",
@@ -964,7 +963,9 @@ Nhiệm vụ của bạn là xác định và trích xuất TẤT CẢ thực th
     - Bước 3: Đối với mỗi trigger sự kiện, xác định tất cả thực thể có vai trò tham số tương ứng và loại tham số tương ứng.
     - Bước 4: Kết luận và đưa kết quả JSON.
 
-## ĐỊNH DẠNG ĐẦU RA (chỉ JSON thuần túy):
+## ĐỊNH DẠNG ĐẦU RA:
+[QUÁ TRÌNH SUY LUẬN TỪNG BƯỚC]
+
 {{
   "entities": [
     {{"text": "văn bản thực thể chính xác", "type": "entity_type"}}
@@ -980,7 +981,6 @@ Nhiệm vụ của bạn là xác định và trích xuất TẤT CẢ thực th
   ]
 }}
 """
-
 
 ENTITIES_BUILDER_SYSTEM_PROMPT_TEMPLATE = """Bạn là một trợ lý AI tạo dữ liệu huấn luyện (dataset builder) nhận dạng thực thể cho tiếng Việt.
 Nhiệm vụ của bạn là viết một quá trình suy luận từng bước tự nhiên giải thích lý do trích xuất các thực thể cụ thể từ câu tiếng Việt, sau đó trả về kết quả JSON chứa các thực thể này.
@@ -1112,7 +1112,6 @@ Bạn sẽ được cung cấp:
 }}
 """
 
-
 FINETUNED_ENTITIES_SYSTEM_PROMPT = "Trích xuất các đề cập thực thể từ câu tiếng Việt đã cho. Hãy suy nghĩ theo từng bước."
 
 FINETUNED_EVENTS_SYSTEM_PROMPT = "Trích xuất các trigger (từ hoặc cụm từ biểu thị sự kiện) từ câu tiếng Việt đã cho. Hãy suy nghĩ theo từng bước."
@@ -1120,3 +1119,508 @@ FINETUNED_EVENTS_SYSTEM_PROMPT = "Trích xuất các trigger (từ hoặc cụm 
 FINETUNED_ARGUMENTS_SYSTEM_PROMPT = "Gán nhãn loại tham số sự kiện cho các thực thể phù hợp từ danh sách thực thể ứng viên đã cho. Hãy suy nghĩ theo từng bước."
 
 FINETUNED_FULL_SYSTEM_PROMPT = "Trích xuất thực thể kèm span text, trigger sự kiện và tham số tương ứng của từng thực thể từ câu tiếng Việt đã cho. Hãy suy nghĩ theo từng bước."
+
+ENTITIES_FEW_SHOT_EXAMPLES = """
+--- Ví dụ 1 ---
+Câu: "Khi đi vào xã Cổ Đông , do trời mưa Hoài bị ngã nên cởi giày và áo bẩn vứt đi ; chân chảy máu vì giẫm vào thuỷ tinh ."
+
+Bước 1: Xác định các thực thể ứng viên trong câu.
+Câu văn mô tả sự việc: khi đi vào một địa danh hành chính, nhân vật Hoài bị ngã do trời mưa, phải cởi giày và áo bẩn vứt đi, chân bị chảy máu vì giẫm vào thủy tinh. Các cụm từ đáng chú ý gồm: "xã Cổ Đông" (địa danh), "Hoài" (tên người), ngoài ra còn có "trời mưa" (hiện tượng thời tiết), "giày", "áo" (đồ dùng cá nhân), "thuỷ tinh" (vật liệu thường).
+
+Bước 2: Phân tích ngữ cảnh và phân loại từng thực thể.
+- "xã Cổ Đông": Đây là tên một đơn vị hành chính cấp xã — một khu vực địa lý gắn liền với chính quyền quản lý. Theo định nghĩa, đơn vị hành chính như xã, huyện, tỉnh đều thuộc loại Geopolitical-Entity, nên đây là thực thể Geopolitical-Entity chứ không phải Location thông thường.
+- "Hoài": Đây là tên riêng của một cá nhân xuất hiện trong câu với vai trò chủ thể của hành động (bị ngã, cởi giày, chân chảy máu). Do đó đây là thực thể Person.
+- Các yếu tố khác không đủ điều kiện: "trời mưa" chỉ là hiện tượng thời tiết, không phải mốc thời gian; "giày", "áo" là đồ vật cá nhân; "thuỷ tinh" là mảnh kính vỡ vô tình trên đường, không phải vũ khí được sử dụng có chủ đích; câu cũng không nhắc đến tổ chức, phương tiện, tiền bạc hay con số nào.
+
+Bước 3: Kết luận.
+Từ phân tích trên, hai thực thể cần trích xuất là "xã Cổ Đông" (Geopolitical-Entity) và "Hoài" (Person).
+
+{
+  "entities": [
+    {"text": "xã Cổ Đông", "type": "Geopolitical-Entity"},
+    {"text": "Hoài", "type": "Person"}
+  ]
+}
+
+--- Ví dụ 2 ---
+Câu: "Tuy nhiên , sau khi ông Pol tuyên bố rút lại dự thảo , cuộc biểu tình dự kiến diễn ra hôm nay cũng được huỷ bỏ ."
+
+Bước 1: Đọc và phân tích câu. Câu này kể về việc sau khi có tuyên bố rút lại dự thảo, cuộc biểu tình vốn được lên kế hoạch đã bị huỷ bỏ. Yếu tố đáng chú ý nhất để trích xuất ở đây là mốc thời gian gắn liền với sự kiện biểu tình.
+
+Bước 2: Phân tích ngữ cảnh của từng thành phần trong câu:
+- Cụm từ "hôm nay" xuất hiện trong cấu trúc "dự kiến diễn ra hôm nay", dùng để chỉ ngày mà cuộc biểu tình được dự kiến tổ chức. Đây là một biểu thức thời gian tương đối, tính từ thời điểm phát ngôn, nên rõ ràng thuộc loại thực thể Time.
+- Các danh từ còn lại như "dự thảo", "cuộc biểu tình" là những khái niệm chỉ văn bản và sự kiện chung chung, không rơi vào bất kỳ loại thực thể nào đã định nghĩa.
+
+Bước 3: Kết luận, thực thể duy nhất cần trích xuất từ câu này là cụm thời gian "hôm nay" với loại Time.
+
+{
+  "entities": [
+    {"text": "hôm nay", "type": "Time"}
+  ]
+}
+
+--- Ví dụ 3 ---
+Câu: "Ngân hàng cổ phần Bưu điện Liên Việt cũng báo cáo bằng văn bản với toà án đã khởi kiện Công ty PVC Land ."
+
+Bước 1: Đọc và xác định các thực thể ứng viên trong câu.
+Câu văn mô tả việc "Ngân hàng cổ phần Bưu điện Liên Việt" báo cáo bằng văn bản với toà án về việc đã khởi kiện "Công ty PVC Land". Các cụm từ đáng chú ý trong câu gồm: "Ngân hàng cổ phần Bưu điện Liên Việt", "toà án" và "Công ty PVC Land".
+
+Bước 2: Phân tích ngữ cảnh và phân loại từng thực thể.
+- "Ngân hàng cổ phần Bưu điện Liên Việt": đây là tên gọi đầy đủ của một ngân hàng thương mại cổ phần, thuộc nhóm tổ chức tài chính. Ngân hàng là một loại hình tổ chức chính thức, vì vậy cụm từ này được phân loại là Organization.
+- "Công ty PVC Land": đây là tên riêng của một doanh nghiệp, là bên bị khởi kiện trong câu. Công ty cũng là một tổ chức chính thức, vì vậy cụm từ này được phân loại là Organization.
+- "toà án" trong câu chỉ được dùng như một cách gọi chung, mang chức năng ngữ pháp chỉ nơi tiếp nhận báo cáo và đơn kiện, không phải tên gọi cụ thể của một cơ quan được nhắc đến như một thực thể riêng, nên không đưa vào kết quả trích xuất.
+
+Bước 3: Tổng hợp kết quả.
+Câu chứa hai thực thể Organization: ngân hàng khởi kiện và công ty bị khởi kiện.
+
+{
+  "entities": [
+    {"text": "Ngân hàng cổ phần Bưu điện Liên Việt", "type": "Organization"},
+    {"text": "Công ty PVC Land", "type": "Organization"}
+  ]
+}
+
+--- Ví dụ 4 ---
+Câu: "Ngày 30/3 , công an thành phố Vinh khởi tố bị can với Nghĩa về tội Làm nhục người khác , theo điều 155 Bộ luật hình sự ."
+
+Bước 1: Xác định các thực thể ứng viên trong câu.
+
+Câu: "Ngày 30/3 , công an thành phố Vinh khởi tố bị can với Nghĩa về tội Làm nhục người khác , theo điều 155 Bộ luật hình sự ."
+
+Quan sát câu, tôi nhận thấy có các thành phần tiềm năng sau:
+- "Ngày 30/3": một mốc thời gian cụ thể mở đầu câu.
+- "công an thành phố Vinh": một cơ quan chức năng thực hiện hành động "khởi tố".
+- "bị can với Nghĩa": tham chiếu đến cá nhân bị khởi tố, trong đó "Nghĩa" là tên riêng của người này.
+- "Làm nhục người khác": tên gọi của tội danh được nêu ra.
+- "điều 155 Bộ luật hình sự": trích dẫn văn bản pháp luật làm căn cứ.
+
+Bước 2: Phân tích ngữ cảnh và xác định loại thực thể phù hợp.
+
+- "Ngày 30/3" là biểu thức chỉ ngày tháng cụ thể, đánh dấu thời điểm xảy ra sự kiện khởi tố → thuộc loại Time.
+- "công an thành phố Vinh" là cơ quan công an cấp thành phố, một cơ quan nhà nước chính thức thực hiện hoạt động tố tụng → thuộc loại Organization.
+- "Nghĩa" là tên riêng của cá nhân bị khởi tố trong câu; dù câu có dùng từ "bị can" để chỉ vai trò, nhưng tên riêng "Nghĩa" mới là cách gọi trực tiếp và cụ thể nhất cho người tham gia sự kiện → thuộc loại Person.
+- "Làm nhục người khác" là tội danh được nêu rõ trong câu ("về tội Làm nhục người khác"), mô tả hành vi vi phạm pháp luật mà bị can bị cáo buộc → thuộc loại Crime.
+- Riêng "điều 155 Bộ luật hình sự" là dẫn chiếu đến điều luật/căn cứ pháp lý chứ không phải hành vi phạm tội hay mức án tuyên, nên không đưa vào kết quả.
+
+Bước 3: Tổng hợp kết quả JSON.
+
+{
+  "entities": [
+    {"text": "Nghĩa", "type": "Person"},
+    {"text": "công an thành phố Vinh", "type": "Organization"},
+    {"text": "Ngày 30/3", "type": "Time"},
+    {"text": "Làm nhục người khác", "type": "Crime"}
+  ]
+}
+
+--- Ví dụ 5 ---
+Câu: "Hôm 20/2 HĐXX mở phiên xử công khai , hai bên tranh cãi căng thẳng về quan hệ hôn nhân , nuôi dưỡng con cái , phân chia tài sản và điều hành Trung Nguyên ."
+
+Bước 1: Đọc và xác định các thực thể ứng viên trong câu.
+
+Câu: "Hôm 20/2 HĐXX mở phiên xử công khai , hai bên tranh cãi căng thẳng về quan hệ hôn nhân , nuôi dưỡng con cái , phân chia tài sản và điều hành Trung Nguyên ."
+
+Khi phân tích câu, tôi nhận thấy câu này mô tả một phiên tòa xét xử công khai với các nội dung tranh chấp. Các yếu tố đáng chú ý trong câu:
+- "Hôm 20/2": cụm từ chỉ thời điểm diễn ra sự kiện.
+- "HĐXX": chủ thể mở phiên xử.
+- "hai bên": các bên tranh cãi.
+- "Trung Nguyên": đối tượng được điều hành.
+
+Bước 2: Phân tích ngữ cảnh và xác định loại thực thể phù hợp.
+
+- "20/2" là một mốc ngày tháng cụ thể (ngày 20 tháng 2), đứng sau từ "Hôm" để chỉ thời điểm phiên xử diễn ra. Theo định nghĩa loại Time (mốc thời gian, ngày tháng, giờ giấc), đây là một biểu thức thời gian rõ ràng và cần được trích xuất. Cụm "Hôm" là từ chỉ thị thời gian tương đối đi kèm, còn phần mốc ngày cụ thể chính là "20/2".
+
+- Các thành phần còn lại trong câu ("HĐXX", "hai bên", "Trung Nguyên") đóng vai trò chủ ngữ, đối tượng tranh chấp trong ngữ cảnh phiên tòa, không phải là mốc thời gian, giá trị tiền tệ, con số hay hành vi phạm tội được nêu đích danh trong câu này.
+
+Bước 3: Kết luận.
+
+Thực thể duy nhất cần trích xuất từ câu là mốc thời gian "20/2" với loại Time.
+
+{
+  "entities": [
+    {"text": "20/2", "type": "Time"}
+  ]
+}
+"""
+
+EVENTS_FEW_SHOT_EXAMPLES = """
+--- Ví dụ 1 ---
+Câu: "Tuyên bố này cho thấy các cố vấn quân sự hàng đầu của Tổng thống đã thành công trong việc thuyết phục ông không vội vàng rút quân khỏi Syria ."
+
+Bước 1: Xác định các trigger ứng viên trong câu.
+- Câu: "Tuyên bố này cho thấy các cố vấn quân sự hàng đầu của Tổng thống đã thành công trong việc thuyết phục ông không vội vàng rút quân khỏi Syria."
+- Các từ/cụm từ có khả năng biểu thị sự kiện: "tuyên bố", "cho thấy", "thuyết phục", "rút".
+- Trong đó, "rút" xuất hiện trong cụm "rút quân khỏi Syria" và là động từ hành động chính đáng chú ý nhất.
+
+Bước 2: Phân tích ngữ cảnh và loại sự kiện cho từng ứng viên.
+- "tuyên bố": chỉ hành động phát ngôn/khẳng định của một bên, không thuộc bất kỳ loại sự kiện nào trong hệ thống phân loại hiện có.
+- "cho thấy": chỉ quan hệ diễn giải giữa phát ngôn và nội dung, không phải sự kiện thực thể.
+- "thuyết phục": là hành động tác động tinh thần/thuyết phục, không nằm trong danh mục loại sự kiện được định nghĩa.
+- "rút": trong cụm "rút quân khỏi Syria", động từ này biểu thị việc rút lui lực lượng quân sự khỏi một khu vực địa lý. Đây chính là sự di chuyển của người/vũ khí/phương tiện từ nơi này sang nơi khác, mang tính chiến thuật/quân sự — hoàn toàn phù hợp với định nghĩa của Movement:Transport. Mặc dù câu nói theo hướng phủ định ("không vội vàng rút"), bản thân động từ "rút" vẫn là trigger biểu thị loại sự kiện di chuyển này.
+
+Bước 3: Kết luận.
+- Trigger duy nhất cần trích xuất là "rút" với loại sự kiện Movement:Transport.
+
+{
+  "events": [
+    {"trigger": "rút", "type": "Movement:Transport"}
+  ]
+}
+
+--- Ví dụ 2 ---
+Câu: "Ông Hưng nổ nhiều phát súng tại quán ăn đêm ."
+
+Bước 1: Xác định các trigger ứng viên trong câu.
+Câu "Ông Hưng nổ nhiều phát súng tại quán ăn đêm." mô tả một hành động được thực hiện bởi chủ thể "Ông Hưng". Cụm từ trung tâm biểu thị hành động ở đây là "nổ nhiều phát súng" — đây là cụm động từ chỉ việc xả/nổ súng liên tiếp, một hành vi bạo lực rõ ràng. Ngoài ra, không có cụm từ nào khác trong câu mang tính sự kiện (như sinh ra, kết hôn, bắt giữ...), nên "nổ nhiều phát súng" là trigger ứng viên duy nhất đáng chú ý.
+
+Bước 2: Phân tích ngữ cảnh và xác định loại sự kiện.
+- Chủ thể: "Ông Hưng" — người thực hiện hành vi.
+- Hành động: "nổ nhiều phát súng" — việc sử dụng vũ khí (súng) để bắn, đây là hành vi tấn công vũ trang nhằm gây hại hoặc đe dọa.
+- Bối cảnh: "tại quán ăn đêm" — địa điểm công cộng nơi hành vi diễn ra.
+Theo định nghĩa của Conflict:Attack (hành vi bạo lực vật lý, tấn công vũ trang nhằm gây hại cho chủ thể khác), việc nổ súng tại một địa điểm công cộng hoàn toàn phù hợp với loại sự kiện này. Lưu ý theo quy tắc, khi cụm từ chứa cả hành động và vũ khí ("nổ súng"), ta trích xuất toàn bộ cụm hành động "nổ nhiều phát súng" làm trigger thay vì tách riêng danh từ "súng".
+
+Bước 3: Kết luận.
+Trigger duy nhất cần trích xuất là "nổ nhiều phát súng" với loại sự kiện Conflict:Attack.
+
+{
+  "events": [
+    {"trigger": "nổ nhiều phát súng", "type": "Conflict:Attack"}
+  ]
+}
+
+--- Ví dụ 3 ---
+Câu: "Dẫn kinh nghiệm các nước , ông cho hay , họ thừa nhận việc dùng tiền thuế đóng góp của dân vào giải cứu ngân hàng , nhưng có phương án phục hồi rõ ràng và “ giám sát chặt chẽ từng đồng đôla gói giải cứu đó ” ."
+
+Bước 1: Xác định các trigger ứng viên trong câu.
+
+Câu nói về việc sử dụng tiền thuế của dân để giải cứu ngân hàng. Các cụm từ tiềm năng biểu thị sự kiện bao gồm: "dùng tiền thuế", "đóng góp", "giải cứu".
+
+Bước 2: Phân tích ngữ cảnh cho từng ứng viên.
+
+- "dùng tiền thuế": Đây là hành động sử dụng tiền, không phải hành động chuyển giao tiền giữa các bên một cách trực tiếp, nên không phải là trigger của sự kiện chuyển tiền.
+- "giải cứu": Cụm từ này xuất hiện hai lần ("giải cứu ngân hàng", "gói giải cứu"), mang nghĩa hành động cứu trợ tài chính, nhưng bản chất là mục đích của việc sử dụng tiền chứ không phải động từ biểu thị dòng tiền dịch chuyển giữa các chủ thể.
+- "đóng góp": Trong cụm "tiền thuế đóng góp của dân", từ "đóng góp" biểu thị rõ ràng hành động người dân nộp/đóng tiền (thông qua thuế) vào quỹ chung — tức dòng tiền dịch chuyển từ cá nhân người dân sang phía nhà nước/quỹ giải cứu. Đây chính là hành vi chuyển tiền giữa các bên, phù hợp với định nghĩa Transaction:Transfer-Money (bất kỳ hành động nào khiến dòng tiền dịch chuyển từ chủ thể này sang chủ thể khác).
+
+Như vậy, trigger duy nhất thỏa mãn là "đóng góp" với loại sự kiện Transaction:Transfer-Money.
+
+Bước 3: Kết quả cuối cùng.
+
+{
+  "events": [
+    {"trigger": "đóng góp", "type": "Transaction:Transfer-Money"}
+  ]
+}
+
+--- Ví dụ 4 ---
+Câu: "Ít nhất 10 người đã thiệt mạng và hàng chục người nhập viện trong các vụ bạo lực ở Thái Lan ."
+
+Bước 1: Xác định các trigger ứng viên trong câu.
+Câu văn mô tả hậu quả của một loạt sự kiện bạo lực tại Thái Lan. Tôi đọc kỹ câu và phát hiện ba cụm từ mang tính sự kiện rõ rệt:
+- "thiệt mạng": biểu thị việc con người tử vong ("Ít nhất 10 người đã thiệt mạng").
+- "nhập viện": biểu thị việc hàng chục người bị thương phải vào bệnh viện điều trị.
+- "bạo lực": danh từ chỉ các vụ việc bạo động xảy ra ở Thái Lan.
+
+Bước 2: Phân tích ngữ cảnh và gán loại sự kiện cho từng trigger.
+- Với "thiệt mạng": Đây là từ ngữ trang trọng thường dùng trong báo chí để chỉ cái chết của con người do tai nạn, thiên tai hoặc bạo lực. Ngữ cảnh "Ít nhất 10 người đã thiệt mạng" khẳng định rõ số người tử vong, hoàn toàn phù hợp với định nghĩa Life:Die.
+- Với "nhập viện": Cụm từ này mô tả việc người dân phải vào viện cấp cứu/điều trị, hàm ý họ đã chịu thương tích vật lý trong các vụ việc được nhắc đến. Theo quy ước, hành động nhập viện cấp cứu là dấu hiệu của việc bị thương, nên đây là trigger của Life:Injure.
+- Với "bạo lực": Trong ngữ cảnh "các vụ bạo lực ở Thái Lan", cụm từ này không chỉ đơn thuần là hành vi tấn công cá nhân mà chỉ các vụ bất ổn, bạo động công cộng diễn ra trên diện rộng — đặc trưng của các cuộc biểu tình/tụ tập phản đối biến thành bạo loạn. Do đó loại sự kiện phù hợp nhất là Conflict:Demonstrate.
+
+Bước 3: Tổng hợp kết quả.
+Ba trigger đã được xác nhận: "thiệt mạng" (Life:Die), "nhập viện" (Life:Injure) và "bạo lực" (Conflict:Demonstrate). Tôi trả về kết quả dưới dạng JSON:
+
+{
+  "events": [
+    {"trigger": "thiệt mạng", "type": "Life:Die"},
+    {"trigger": "nhập viện", "type": "Life:Injure"},
+    {"trigger": "bạo lực", "type": "Conflict:Demonstrate"}
+  ]
+}
+
+--- Ví dụ 5 ---
+Câu: "Liên minh đối lập Islami Jamhoori Ittehad ( IJT ) chiến thắng cuộc bầu cử cuối năm đó và lên cầm quyền ."
+
+Bước 1: Xác định các trigger ứng viên trong câu.
+Câu nói về liên minh đối lập Islami Jamhoori Ittehad (IJT) giành chiến thắng trong một sự kiện chính trị cuối năm và nắm quyền lực. Các cụm từ ứng viên biểu thị sự kiện gồm:
+- "chiến thắng": diễn tả việc đạt được thắng lợi trong một cuộc cạnh tranh.
+- "bầu cử": chỉ quá trình bỏ phiếu để chọn người/đảng vào vị trí quyền lực.
+- "lên cầm quyền": diễn tả việc bắt đầu nắm giữ quyền lực sau khi giành được vị trí.
+
+Bước 2: Phân tích ngữ cảnh và xác định loại sự kiện phù hợp.
+- "chiến thắng" ở đây là kết quả của quá trình bầu cử, mang tính mô tả chung về thắng lợi chứ không phải hành động bầu chọn hay trúng cử trực tiếp theo nghĩa pháp lý của sự kiện bầu cử.
+- "bầu cử" là từ khóa trung tâm: toàn bộ câu xoay quanh việc liên minh này "chiến thắng cuộc bầu cử", tức là họ đã được cử tri bỏ phiếu bầu chọn để giành vị trí cầm quyền. Theo định nghĩa, sự kiện Personnel:Elect bao gồm việc một chủ thể chính thức được bầu chọn vào một vị trí thông qua bỏ phiếu. Do đó "bầu cử" chính là trigger thể hiện trực tiếp sự kiện bầu cử này.
+- "lên cầm quyền" chỉ mô tả hệ quả là việc nắm quyền sau khi trúng cử, không phải hành động bầu chọn, nên không được trích xuất như một trigger riêng cho sự kiện Elect.
+
+Kết luận: Trigger duy nhất cần trích xuất là "bầu cử" với loại sự kiện Personnel:Elect.
+
+{
+  "events": [
+    {"trigger": "bầu cử", "type": "Personnel:Elect"}
+  ]
+}
+"""
+
+EVENT_ARGUMENTS_FEW_SHOT_EXAMPLES = """
+--- Ví dụ 1 ---
+Câu: "Ít nhất 10 người đã thiệt mạng và hàng chục người nhập viện trong các vụ bạo lực ở Thái Lan ."
+Loại sự kiện: "Conflict:Demonstrate"
+Trigger: "bạo lực"
+
+Trong câu văn "Ít nhất 10 người đã thiệt mạng và hàng chục người nhập viện trong các vụ bạo lực ở Thái Lan .", từ khóa "bạo lực" đóng vai trò là trigger chỉ một sự kiện xung đột/biểu tình đang diễn ra.
+
+Khi xem xét các thực thể trong câu:
+- "10 người" và "hàng chục người" là những đối tượng chịu tác động hoặc tham gia vào sự việc, nhưng xét về mặt không gian xảy ra hành vi bạo lực, họ là nạn nhân hoặc người liên quan trực tiếp chứ không phải là địa điểm.
+- "Thái Lan" được nhắc đến sau giới từ "ở", xác định phạm vi không gian nơi các vụ bạo lực này diễn ra. Do đó, "Thái Lan" đóng vai trò là địa điểm (Place) của sự kiện.
+
+Vì vậy, thực thể "Thái Lan" được gán loại tham số là "Place".
+
+{
+  "arguments": [
+    {"text": "Thái Lan", "type": "Place"}
+  ]
+}
+
+--- Ví dụ 2 ---
+Câu: "Tuyên bố này cho thấy các cố vấn quân sự hàng đầu của Tổng thống đã thành công trong việc thuyết phục ông không vội vàng rút quân khỏi Syria ."
+Loại sự kiện: "Movement:Transport"
+Trigger: "rút"
+
+Trong câu văn "Tuyên bố này cho thấy các cố vấn quân sự hàng đầu của Tổng thống đã thành công trong việc thuyết phục ông không vội vàng rút quân khỏi Syria.", sự kiện di chuyển được kích hoạt bởi từ "rút".
+
+Phân tích các thực thể ứng viên:
+- Thực thể "ông" được nhắc đến trong ngữ cảnh là người đưa ra quyết định về việc rút quân. Tuy nhiên, xét theo hành động "rút quân", người thực hiện hành động di chuyển (Agent) chính là chủ thể được nhắc đến qua đại từ này. Do đó, "ông" đóng vai trò là Agent (người thực hiện việc rút).
+- Thực thể "quân" trong cụm từ "rút quân" chỉ đối tượng (lực lượng quân đội) bị di chuyển hoặc thay đổi vị trí địa lý. Trong loại sự kiện vận chuyển, đối tượng được di dời này tương ứng với vai trò Artifact.
+- Thực thể "Syria" là địa danh đi kèm với giới từ "khỏi", chỉ nơi mà lực lượng quân đội đang hiện diện và sẽ rời đi. Do đó, "Syria" đóng vai trò là Origin (điểm xuất phát/nơi bắt đầu sự di chuyển).
+
+Kết luận các vai trò:
+- "ông" -> Agent
+- "quân" -> Artifact
+- "Syria" -> Origin
+
+{
+  "arguments": [
+    {"text": "ông", "type": "Agent"},
+    {"text": "Syria", "type": "Origin"},
+    {"text": "quân", "type": "Artifact"}
+  ]
+}
+
+--- Ví dụ 3 ---
+Câu: "Chiều 1/5 , Phong mang theo nhiều dây chuyền , nhẫn vàng đến một tiệm vàng S. nằm trên địa bàn thị xã Ayun Pa để bán thì bị chủ tiệm nghi ngờ là tài sản trộm cắp nên báo với lực lượng công an ."
+Loại sự kiện: "Transaction:Transfer-Money"
+Trigger: "mang"
+
+Trong câu văn trên, hành động "mang" (trong ngữ cảnh mang tài sản đến để bán) đóng vai trò là trigger cho một sự kiện giao dịch/chuyển nhượng tài sản.
+
+- Đầu tiên, xét thực thể "Phong", đây là người trực tiếp thực hiện hành vi mang các vật phẩm đến tiệm vàng để giao dịch. Do đó, "Phong" đóng vai trò là người thực hiện việc chuyển giao tài sản (Giver).
+- Tiếp theo, xét cụm từ "nhiều dây chuyền , nhẫn vàng", đây là các vật phẩm có giá trị tương đương với tiền tệ được đưa vào giao dịch. Trong ngữ cảnh của sự kiện chuyển nhượng tài chính này, cụm từ này đóng vai trò là đối tượng giá trị được chuyển đi (Money).
+- Các thực thể khác như "một tiệm vàng S." hay địa danh "thị xã Ayun Pa" là các yếu tố về địa điểm, không thuộc vào các tham số cốt lõi của giao dịch được xác định trong trường hợp này.
+
+{
+  "arguments": [
+    {"text": "Phong", "type": "Giver"},
+    {"text": "nhiều dây chuyền , nhẫn vàng", "type": "Money"}
+  ]
+}
+
+--- Ví dụ 4 ---
+Câu: "Chiều 1/5 , Phong mang theo nhiều dây chuyền , nhẫn vàng đến một tiệm vàng S. nằm trên địa bàn thị xã Ayun Pa để bán thì bị chủ tiệm nghi ngờ là tài sản trộm cắp nên báo với lực lượng công an ."
+Loại sự kiện: "Movement:Transport"
+Trigger: "đến"
+
+Trong câu văn "Chiều 1/5 , Phong mang theo nhiều dây chuyền , nhẫn vàng đến một tiệm vàng S. nằm trên địa bàn thị xã Ayun Pa để bán thì bị chủ tiệm nghi ngờ là tài sản trộm cắp nên báo với lực lượng công an .", sự kiện di chuyển được kích hoạt bởi từ "đến".
+
+- Đầu tiên, xét thực thể "Phong": Đây là người thực hiện hành động di chuyển (mang theo đồ vật đến một địa điểm), do đó "Phong" đóng vai trò là chủ thể thực hiện hành động, tương ứng với tham số Agent.
+- Tiếp theo, xét cụm từ "một tiệm vàng S.": Đây là địa điểm mà nhân vật Phong hướng tới để thực hiện việc bán vàng, đóng vai trò là đích đến của hành trình di chuyển, tương ứng với tham số Destination.
+- Cuối cùng, xét cụm "nằm trên địa bàn thị xã Ayun Pa": Cụm từ này mô tả vị trí địa lý của tiệm vàng S., xác định rõ hơn về điểm đến trong không gian, do đó nó cũng đóng vai trò là một phần của thông tin đích đến (Destination).
+
+{
+  "arguments": [
+    {"text": "Phong", "type": "Agent"},
+    {"text": "một tiệm vàng S.", "type": "Destination"},
+    {"text": "nằm trên địa bàn thị xã Ayun Pa", "type": "Destination"}
+  ]
+}
+
+--- Ví dụ 5 ---
+Câu: "Khi đi vào xã Cổ Đông , do trời mưa Hoài bị ngã nên cởi giày và áo bẩn vứt đi ; chân chảy máu vì giẫm vào thuỷ tinh ."
+Loại sự kiện: "Movement:Transport"
+Trigger: "đi vào"
+
+- Bước 1: Phân tích câu văn, ta thấy cụm từ "đi vào" đóng vai trò là trigger (tác nhân kích hoạt) cho một sự kiện di chuyển/vận chuyển. Các thực thể liên quan trực tiếp đến hành động này trong câu là "xã Cổ Đông" và "Hoài".
+- Bước 2: Xem xét vai trò của từng thực thể đối với hành động "đi vào":
+    - "Hoài" là người thực hiện hành động di chuyển, chủ thể thực hiện việc đi vào một địa điểm. Do đó, "Hoài" đóng vai trò là Agent (Chủ thể).
+    - "xã Cổ Đông" là địa danh được nhắc đến sau cụm từ "đi vào", đóng vai trò là nơi mà chủ thể hướng tới hoặc kết thúc hành trình di chuyển trong ngữ cảnh này. Do đó, "xã Cổ Đông" đóng vai trò là Destination (Điểm đến).
+- Bước 3: Tổng hợp lại, ta có hai đối số tương ứng với sự kiện di chuyển là Agent là "Hoài" và Destination là "xã Cổ Đông".
+
+{
+  "arguments": [
+    {"text": "xã Cổ Đông", "type": "Destination"},
+    {"text": "Hoài", "type": "Agent"}
+  ]
+}
+"""
+
+FULL_FEW_SHOT_EXAMPLES = """
+--- Ví dụ 1 ---
+Câu: "Bộ Ngoại giao Pakistan cho biết Varthaman được đối xử phù hợp với luật pháp quốc tế và việc phóng thích anh này " nhằm giảm căng thẳng gia tăng với Ấn Độ " ."
+
+- Bước 1: Phân tích các thực thể trong câu.
+    - "Bộ Ngoại giao Pakistan": Đây là một cơ quan nhà nước, thuộc loại Organization.
+    - "Varthaman": Tên riêng của một cá nhân, thuộc loại Person.
+    - "Ấn Độ": Tên một quốc gia, thuộc loại Geopolitical-Entity.
+    - "anh này": Đại từ nhân xưng chỉ Varthaman, thuộc loại Person. Trong ngữ cảnh câu, "anh" được dùng để chỉ đối tượng cụ thể đang được nhắc đến.
+
+- Bước 2: Xác định các sự kiện.
+    - Cụm từ "phóng thích" chỉ hành động cho phép một người được tự do, thoát khỏi sự giam giữ hoặc quản lý của pháp luật/cơ quan chức năng. Điều này tương ứng với loại sự kiện Justice:Release-Parole.
+
+- Bước 3: Xác định các đối số cho sự kiện.
+    - Với trigger "phóng thích", đối tượng được giải phóng là "anh này" (đại diện cho Varthaman). Do đó, "anh" được xác định là đối số thuộc loại Person (người được thả).
+
+- Bước 4: Kết luận và trích xuất kết quả.
+    - Thực thể mục tiêu là "anh" (Person).
+    - Sự kiện là "phóng thích" (Justice:Release-Parole) với đối số là "anh" (Person).
+
+{
+  "entities": [
+    {"text": "anh", "type": "Person"}
+  ],
+  "events": [
+    {
+      "type": "Justice:Release-Parole",
+      "trigger": "phóng thích",
+      "arguments": [
+        {"text": "anh", "type": "Person"}
+      ]
+    }
+  ]
+}
+
+--- Ví dụ 2 ---
+Câu: "Một cán bộ trại giam cho biết , những ngày bị biệt giam trong tù sau phiên phúc thẩm , Nghĩa có những biểu hiện tâm lý khó nắm bắt ."
+
+- Bước 1: Phân tích các thực thể trong câu.
+    - "Một cán bộ trại giam": Đây là cụm danh từ chỉ người (nghề nghiệp/vị trí), nhưng không phải là đối tượng chính được nhắc đến trong sự kiện cụ thể này.
+    - "Nghĩa": Đây là tên riêng của một cá nhân, đóng vai trò là chủ thể được nhắc đến trong câu. Do đó, "Nghĩa" được xác định là thực thể loại `Person`.
+
+- Bước 2: Phân tích các sự kiện và trigger.
+    - Trong câu có cụm từ "bị biệt giam trong tù". Từ "giam" (nằm trong cụm "biệt giam") là hành động tước tự do, giữ người lại trong cơ sở giam giữ. Đây là hành vi liên quan đến việc quản lý phạm nhân/người bị tạm giam, thuộc loại sự kiện `Justice:Arrest-Jail`.
+
+- Bước 3: Xác định các đối số cho sự kiện.
+    - Với trigger "giam" (hành động giam giữ), đối tượng chịu tác động trực tiếp của việc bị giam là "Nghĩa". Do đó, "Nghĩa" được gán vào vai trò `Person` (người bị giam) trong sự kiện này.
+
+- Bước 4: Kết luận và tổng hợp kết quả.
+    - Thực thể: "Nghĩa" (Person).
+    - Sự kiện: `Justice:Arrest-Jail` với trigger "giam" và đối số là "Nghĩa".
+
+{
+  "entities": [
+    {"text": "Nghĩa", "type": "Person"}
+  ],
+  "events": [
+    {
+      "type": "Justice:Arrest-Jail",
+      "trigger": "giam",
+      "arguments": [
+        {"text": "Nghĩa", "type": "Person"}
+      ]
+    }
+  ]
+}
+
+--- Ví dụ 3 ---
+Câu: "Bộ Quốc phòng Nga hôm nay ra thông cáo khẳng định Israel đứng sau vụ tấn công bằng tên lửa hành trình nhằm vào sân bay T -4 , cơ sở quân sự quan trọng của Syria ở phía đông tỉnh Homs , Interfax đưa tin ."
+
+- Bước 1: Phân tích các thực thể trong câu.
+    - "Bộ Quốc phòng Nga": Đây là tên một cơ quan nhà nước, thuộc về chính phủ Nga, nên được phân loại là `Organization`.
+    - Các thực thể khác như "Israel", "Syria", "Homs" (địa danh), "sân bay T -4" (cơ sở hạ tầng) cũng xuất hiện nhưng không nằm trong danh sách mục tiêu cần trích xuất.
+
+- Bước 2: Xác định các sự kiện và trigger.
+    - Cụm từ "ra thông cáo khẳng định" đóng vai trò là hành động đưa ra một tuyên bố chính thức, mang tính chất cáo buộc hoặc khẳng định về một sự việc. Trong ngữ cảnh này, "thông cáo" được xác định là trigger cho sự kiện `Justice:Charge-Indict` (khởi tố/buộc tội), vì thông cáo này chứa đựng nội dung buộc tội Israel đứng sau một vụ tấn công.
+
+- Bước 3: Xác định các đối số cho sự kiện.
+    - Với trigger "thông cáo", chủ thể thực hiện hành động đưa ra thông cáo/cáo buộc này là "Bộ Quốc phòng Nga". Do đó, "Bộ Quốc phòng Nga" được gán vai trò là `Prosecutor` (người/cơ quan đưa ra cáo buộc).
+
+- Bước 4: Tổng hợp kết quả.
+    - Thực thể: "Bộ Quốc phòng Nga" (Organization).
+    - Sự kiện: `Justice:Charge-Indict` với trigger "thông cáo" và đối số là "Bộ Quốc phòng Nga" (Prosecutor).
+
+{
+  "entities": [
+    {"text": "Bộ Quốc phòng Nga", "type": "Organization"}
+  ],
+  "events": [
+    {
+      "type": "Justice:Charge-Indict",
+      "trigger": "thông cáo",
+      "arguments": [
+        {"text": "Bộ Quốc phòng Nga", "type": "Prosecutor"}
+      ]
+    }
+  ]
+}
+
+--- Ví dụ 4 ---
+Câu: "Những người này thông báo cho Khodorkovsky rằng người mẹ bị ung thư của ông đang ngày càng yếu đi và cảnh báo về khả năng diễn ra phiên xét xử ông lần thứ ba ."
+
+- Bước 1: Phân tích các thực thể trong câu.
+    - "Khodorkovsky": Là tên riêng của một cá nhân, thuộc loại Person.
+    - "người mẹ": Chỉ người thân trong gia đình, là một cụm danh từ chỉ người.
+    - "ông": Trong ngữ cảnh này, "ông" là đại từ nhân xưng dùng để chỉ Khodorkovsky (người đang được nhắc đến), thuộc loại Person.
+    - "người này": Chỉ một nhóm người tham gia vào hành động thông báo.
+
+- Bước 2: Phân tích các sự kiện trong câu.
+    - Cụm từ "phiên xét xử" liên quan đến một thủ tục pháp lý tại tòa án. Đây là sự kiện về việc tổ chức một phiên tòa để xem xét tội danh, do đó nó thuộc loại Justice:Trial-Hearing. Trigger chính là "xét xử".
+
+- Bước 3: Xác định các đối số cho sự kiện.
+    - Với sự kiện "xét xử" (Justice:Trial-Hearing), đối tượng là người sẽ phải tham gia phiên tòa, chịu sự xem xét của pháp luật chính là "ông" (tức Khodorkovsky). Do đó, "ông" đóng vai trò là Defendant (bị cáo/người bị xét xử).
+
+- Bước 4: Kết luận và tổng hợp kết quả.
+    - Thực thể cần trích xuất là "ông" (Person).
+    - Sự kiện là "xét xử" (Justice:Trial-Hearing) với đối số là "ông" (Defendant).
+
+{
+  "entities": [
+    {"text": "ông", "type": "Person"}
+  ],
+  "events": [
+    {
+      "type": "Justice:Trial-Hearing",
+      "trigger": "xét xử",
+      "arguments": [
+        {"text": "ông", "type": "Defendant"}
+      ]
+    }
+  ]
+}
+
+--- Ví dụ 5 ---
+Câu: "Người dân kiểm tra một khu vực bị đòn tấn công ở khu gần thủ đô Damascus và miền nam Syria đang bị phe đối lập kiểm soát , thành phố Aleppo , ngày 26/7 ."
+
+- Bước 1: Phân tích các thực thể trong câu.
+    - Cụm từ "gần thủ đô Damascus và miền nam Syria" chỉ một khu vực địa lý cụ thể bao gồm các thành phố và vùng lãnh thổ, do đó được phân loại là `Location`.
+    - Các thực thể khác như "Người dân", "phe đối lập", "thành phố Aleppo" và mốc thời gian "ngày 26/7" cũng xuất hiện nhưng không nằm trong danh sách mục tiêu cần trích xuất.
+
+- Bước 2: Xác định các sự kiện.
+    - Cụm từ "đòn tấn công" chỉ một hành vi bạo lực, tấn công vũ trang hoặc xung đột đang diễn ra. Điều này khớp với loại sự kiện `Conflict:Attack`.
+
+- Bước 3: Xác định các đối số cho sự kiện.
+    - Với trigger "đòn tấn công", ta cần xác định nơi diễn ra hành vi này. Cụm từ "gần thủ đô Damascus và miền nam Syria" là địa điểm nơi cuộc tấn công xảy ra, vì vậy nó được gán cho tham số `Place`.
+
+- Bước 4: Tổng hợp kết quả.
+    - Kết quả trích xuất bao gồm thực thể `Location` và sự kiện `Conflict:Attack` với đối số `Place` tương ứng.
+
+{
+  "entities": [
+    {"text": "gần thủ đô Damascus và miền nam Syria", "type": "Location"}
+  ],
+  "events": [
+    {
+      "type": "Conflict:Attack",
+      "trigger": "đòn tấn công",
+      "arguments": [
+        {"text": "gần thủ đô Damascus và miền nam Syria", "type": "Place"}
+      ]
+    }
+  ]
+}
+"""

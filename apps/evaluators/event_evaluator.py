@@ -50,6 +50,10 @@ class EventEvaluator:
         pred_list = pred_events_list
         gold_list = [record.events for record in records]
 
+        self.last_sentences = [record.sentence for record in records]
+        self.last_predictions = pred_list
+        self.last_gold = gold_list
+
         precision = Precision("event").compute(pred_list, gold_list)
         recall = Recall("event").compute(pred_list, gold_list)
         f1 = F1Score("event").compute(pred_list, gold_list)

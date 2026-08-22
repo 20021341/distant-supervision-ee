@@ -50,6 +50,10 @@ class EntityEvaluator:
         pred_list = pred_entities_list
         gold_list = [record.entities for record in records]
 
+        self.last_sentences = [record.sentence for record in records]
+        self.last_predictions = pred_list
+        self.last_gold = gold_list
+
         precision = Precision("entity").compute(pred_list, gold_list)
         recall = Recall("entity").compute(pred_list, gold_list)
         f1 = F1Score("entity").compute(pred_list, gold_list)
