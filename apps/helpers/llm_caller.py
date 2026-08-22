@@ -4,8 +4,10 @@ from typing import Dict, Any, Tuple
 from apps.helpers.decorators import retry
 import json
 
+from pathlib import Path
 from dotenv import load_dotenv
-load_dotenv('/Users/dagoras/Documents/workspace/distant-supervision-ee/.env')
+env_path = Path(__file__).resolve().parent.parent.parent / '.env'
+load_dotenv(dotenv_path=env_path)
 
 
 OPENAI_API_KEY = os.getenv('OPENAI_API_KEY', None)

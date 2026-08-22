@@ -383,7 +383,6 @@ class Trainer:
                     save_steps = save_steps,
                     fp16 = (self.device_type == "cuda" and not has_bf16),
                     bf16 = (self.device_type == "cuda" and has_bf16),
-                    use_mps_device = (self.device_type == "mps"),
                 )
             )
             print(f"Starting LoRA Fine-Tuning using SFTTrainer ({self.device_type.upper()})...")
@@ -471,7 +470,9 @@ if __name__ == "__main__":
     # finetuned_model = trainer.train(train_dataset, phase="entity", max_steps=1, save_steps=1)
     # print(f"Success! Finetuned model loaded successfully: {finetuned_model}")
 
-    finetuned_model = EntityExtractorModel('/Users/dagoras/Documents/workspace/distant-supervision-ee/checkpoints/run--2026-06-24--13-47-27/final')
+    project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
+    ckpt_path = os.path.join(project_root, 'checkpoints', 'run--2026-06-24--13-47-27', 'final')
+    finetuned_model = EntityExtractorModel(ckpt_path)
     finetuned_model.evaluate(dataset=test_dataset)
 
 
