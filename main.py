@@ -170,6 +170,57 @@ def build_data(phase: str, n_jobs: int):
             raise ValueError(f"Invalid build phase: {phase}")
 
 
+def retry_failed(phase: str, n_jobs: int):
+    print(f"=== Retrying failed ([LỖI]) records for phase: {phase} ===")
+
+    loaders = {
+        "entity": (load_entity_reasoning_dataset, EntityReasoningDataset, EntityBuilder),
+        "event": (load_event_reasoning_dataset, EventReasoningDataset, EventBuilder),
+        "argument": (load_argument_reasoning_dataset, ArgumentReasoningDataset, ArgumentBuilder),
+        "full": (load_full_reasoning_dataset, FullReasoningDataset, FullBuilder),
+    }
+    loader, dataset_cls, builder_cls = loaders[phase]
+    builder = builder_cls()
+
+    for split in ["train", "test"]:
+        try:
+            dataset = loader(split)
+        except FileNotFoundError as e:
+            print(f"Warning: {e}. Skipping this split.")
+            continue
+
+        items = list(dataset.items)
+        failed_indices = [i for i, item in enumerate(items) if item.reasoning.startswith("[LỖI]")]
+        if not failed_indices:
+            print(f"[{split}] No failed records found. Skipping.")
+            continue
+
+        print(f"[{split}] Found {len(failed_indices)} failed records out of {len(items)}. Retrying...")
+
+        if phase == "entity":
+            batch_items = [(items[i].sentence, items[i].entities) for i in failed_indices]
+        elif phase == "event":
+            batch_items = [(items[i].sentence, items[i].events) for i in failed_indices]
+        elif phase == "argument":
+            batch_items = [
+                (items[i].sentence, items[i].event_type, items[i].event_trigger, items[i].entities, items[i].arguments)
+                for i in failed_indices
+            ]
+        elif phase == "full":
+            batch_items = [(items[i].sentence, items[i].entities, items[i].events) for i in failed_indices]
+
+        retried_items = builder.build_batch(batch_items, max_workers=n_jobs)
+
+        still_failed = 0
+        for idx, retried_item in zip(failed_indices, retried_items):
+            items[idx] = retried_item
+            if retried_item.reasoning.startswith("[LỖI]"):
+                still_failed += 1
+
+        dataset_cls(items=items).save(split)
+        print(f"[{split}] Retried {len(failed_indices)} records: {len(failed_indices) - still_failed} fixed, {still_failed} still failing. Saved.")
+
+
 def run_eval(eval_model: str, sample: float, n_jobs: int, options: list, csv_output: str, eval_phases: list, eval_base_url: str = None, eval_api_key: str = None):
     include_hints = "include_hints" in options
     few_shot = "few_shot" in options
@@ -242,6 +293,12 @@ def main():
         type=int,
         default=5,
         help="Number of parallel workers for builder queries (default: 5)"
+    )
+    parser.add_argument(
+        "--retry_errors",
+        choices=["entity", "event", "argument", "full"],
+        help="Re-run only the records whose reasoning failed (starts with '[LỖI]') for the given phase, "
+             "in-place across both train and test splits"
     )
     parser.add_argument(
         "--train",
@@ -357,6 +414,8 @@ def main():
 
     if args.build_data:
         build_data(args.build_data, args.n_jobs)
+    elif args.retry_errors:
+        retry_failed(args.retry_errors, args.n_jobs)
     elif args.eval_model:
         run_eval(
             eval_model=args.eval_model,

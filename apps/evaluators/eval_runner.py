@@ -1,16 +1,18 @@
 import os
 import csv
+import glob
 import json
 import re
 import time
 import logging
 from datetime import datetime, timezone
-from typing import List, Union, Dict, Any, Optional
+from typing import List, Tuple, Union, Dict, Any, Optional
 
 from pydantic import BaseModel
 
 from apps.helpers.dataset_loader import load_base_dataset
 from apps.helpers.llm_caller import make_llm_caller
+from apps.models import ExtractedEntity, ExtractedEvent
 from apps.constants import (
     FINETUNED_ENTITIES_SYSTEM_PROMPT,
     FINETUNED_EVENTS_SYSTEM_PROMPT,
@@ -76,6 +78,67 @@ def _dump_predictions(evaluator: Any, output_path: str) -> None:
                 "gold": _to_jsonable(gold[i]) if i < len(gold) else None,
             }
             f.write(json.dumps(row, ensure_ascii=False) + "\n")
+
+
+def _find_latest_output_file(output_dir: str, model_slug: str, phase: str) -> Optional[str]:
+    """
+    Looks for a previously-dumped prediction file for this model+phase, e.g. from an
+    earlier standalone `--eval_phases entity` run. Filenames are timestamp-suffixed
+    (`{model_slug}__{phase}__{run_timestamp}.jsonl`), so a plain sort picks the latest.
+    """
+    pattern = os.path.join(output_dir, f"{model_slug}__{phase}__*.jsonl")
+    matches = sorted(glob.glob(pattern))
+    return matches[-1] if matches else None
+
+
+def _load_phase_predictions_from_file(path: str, phase: str) -> Tuple[List[str], List[List[Any]]]:
+    item_cls = ExtractedEntity if phase == "entity" else ExtractedEvent
+    sentences = []
+    predictions = []
+    with open(path, "r", encoding="utf-8") as f:
+        for line in f:
+            line = line.strip()
+            if not line:
+                continue
+            row = json.loads(line)
+            sentences.append(row.get("sentence"))
+            items = []
+            for d in (row.get("prediction") or []):
+                try:
+                    items.append(item_cls.model_validate(d))
+                except Exception:
+                    pass
+            predictions.append(items)
+    return sentences, predictions
+
+
+def _try_reuse_entity_event_predictions(
+    output_dir: str, model_slug: str, current_sentences: List[str]
+) -> Tuple[Optional[List[List[ExtractedEntity]]], Optional[List[List[ExtractedEvent]]]]:
+    """
+    Looks for previously-saved entity and event phase output files for this model
+    (e.g. from an earlier `--eval_phases entity event` run) and reuses them for the
+    pipeline phase if their sentences line up exactly with the current sample --
+    avoids re-paying for entity/event LLM calls that already happened.
+    """
+    entity_file = _find_latest_output_file(output_dir, model_slug, "entity")
+    event_file = _find_latest_output_file(output_dir, model_slug, "event")
+    if not entity_file or not event_file:
+        return None, None
+
+    entity_sentences, entity_predictions = _load_phase_predictions_from_file(entity_file, "entity")
+    event_sentences, event_predictions = _load_phase_predictions_from_file(event_file, "event")
+
+    if entity_sentences != current_sentences or event_sentences != current_sentences:
+        logger.info(
+            "Found cached entity/event output files but their sentences don't match the "
+            "current sample (different --sample or dataset order) -- recomputing from scratch."
+        )
+        return None, None
+
+    logger.info(f"Reusing cached entity predictions from {entity_file}")
+    logger.info(f"Reusing cached event predictions from {event_file}")
+    return entity_predictions, event_predictions
 
 
 def _append_csv_row(csv_path: str, row: Dict[str, Any]) -> None:
@@ -188,12 +251,35 @@ def run_evaluation(
     logger.info(f"Phases to run: {[name for name, _ in phases_to_run]}")
 
     results = []
+    entity_predictions = None
+    event_predictions = None
     try:
         for phase, evaluator in phases_to_run:
             logger.info(f"--- Running eval phase: {phase} ---")
             start = time.time()
-            precision, recall, f1 = evaluator.evaluate(dataset, sample=sample, n_jobs=n_jobs)
+
+            if phase == "pipeline" and (entity_predictions is None or event_predictions is None):
+                current_sentences = [record.sentence for record in dataset.items[:n_samples]]
+                entity_predictions, event_predictions = _try_reuse_entity_event_predictions(
+                    output_dir, model_slug, current_sentences
+                )
+
+            if phase == "pipeline" and entity_predictions is not None and event_predictions is not None:
+                precision, recall, f1 = evaluator.evaluate(
+                    dataset,
+                    sample=sample,
+                    n_jobs=n_jobs,
+                    precomputed_entities=entity_predictions,
+                    precomputed_events=event_predictions,
+                )
+            else:
+                precision, recall, f1 = evaluator.evaluate(dataset, sample=sample, n_jobs=n_jobs)
             duration = time.time() - start
+
+            if phase == "entity":
+                entity_predictions = evaluator.last_predictions
+            elif phase == "event":
+                event_predictions = evaluator.last_predictions
 
             output_file = os.path.join(output_dir, f"{model_slug}__{phase}__{run_timestamp}.jsonl")
             _dump_predictions(evaluator, output_file)
