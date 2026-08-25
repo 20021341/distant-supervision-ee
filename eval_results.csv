@@ -12,6 +12,7 @@ timestamp,model,model_source,phase,sample_rate,n_samples,options,duration_second
 2026-08-25T09:04:40.294200+00:00,entity-finetuned,vllm,entity,1.0,4301,n/a (finetuned checkpoint uses fixed system prompts),804.23,0.2593,0.6882,0.3767,eval_outputs/entity-finetuned__entity__20260825T085116Z.jsonl
 2026-08-24T09:18:19.000411+00:00,event-finetuned,vllm,event,1.0,4301,n/a (finetuned checkpoint uses fixed system prompts),721.69,0.4599,0.7333,0.5653,eval_outputs/event-finetuned__event__20260824T090617Z.jsonl
 2026-08-25T10:21:23.156992+00:00,argument-finetuned,vllm,argument,1.0,4301,n/a (finetuned checkpoint uses fixed system prompts),350.61,0.8617,0.9034,0.8821,eval_outputs/argument-finetuned__argument__20260825T101532Z.jsonl
+2026-08-25T15:25:56.791946+00:00,argument-finetuned,vllm,pipeline,1.0,4301,n/a (finetuned checkpoint uses fixed system prompts),601.55,0.3165,0.6317,0.4217,eval_outputs/argument-finetuned__pipeline__20260825T151555Z.jsonl
 2026-08-24T04:16:43.697890+00:00,full-finetuned,vllm,full,1.0,4301,n/a (finetuned checkpoint uses fixed system prompts),724.28,0.3729,0.5602,0.4478,eval_outputs/full-finetuned__full__20260824T040439Z.jsonl
 2026-08-24T09:46:56.051013+00:00,google/gemma-4-31b-it,openrouter,entity,1.0,4301,"include_hints,few_shot",2692.53,0.1344,0.7747,0.2291,eval_outputs/gemma-4-31b-it__entity__20260824T090203Z.jsonl
 2026-08-24T10:19:43.689165+00:00,google/gemma-4-31b-it,openrouter,event,1.0,4301,"include_hints,few_shot",1967.61,0.3326,0.8099,0.4716,eval_outputs/gemma-4-31b-it__event__20260824T090203Z.jsonl
