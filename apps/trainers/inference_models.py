@@ -84,12 +84,12 @@ class FinetunedModel:
         
         if is_mlx:
             from mlx_lm import generate
-            out_str = generate(self.model, self.tokenizer, prompt, verbose=False, max_tokens=512)
+            out_str = generate(self.model, self.tokenizer, prompt, verbose=False, max_tokens=2048)
         else:
             # PyTorch / CUDA / MPS / CPU generation
             inputs = self.tokenizer([prompt], return_tensors = "pt")
             inputs = {k: v.to(self.model.device) for k, v in inputs.items()}
-            outputs = self.model.generate(**inputs, max_new_tokens = 512, use_cache = True)
+            outputs = self.model.generate(**inputs, max_new_tokens = 2048, use_cache = True)
             prompt_len = inputs["input_ids"].shape[1]
             out_str = self.tokenizer.decode(outputs[0][prompt_len:], skip_special_tokens = True)
             

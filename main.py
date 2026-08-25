@@ -170,12 +170,15 @@ def build_data(phase: str, n_jobs: int):
             raise ValueError(f"Invalid build phase: {phase}")
 
 
-def run_eval(eval_model: str, sample: float, n_jobs: int, options: list, csv_output: str):
+def run_eval(eval_model: str, sample: float, n_jobs: int, options: list, csv_output: str, eval_phases: list, eval_base_url: str = None, eval_api_key: str = None):
     include_hints = "include_hints" in options
     few_shot = "few_shot" in options
 
     print(f"=== Starting Evaluation for model: {eval_model} ===")
     print(f"Sample rate: {sample}, n_jobs: {n_jobs}, include_hints: {include_hints}, few_shot: {few_shot}")
+    print(f"Phases: {eval_phases if eval_phases else 'entity, event, argument, pipeline, full (default)'}")
+    if eval_base_url:
+        print(f"Serving endpoint: {eval_base_url}")
 
     from apps.evaluators.eval_runner import run_evaluation
     run_evaluation(
@@ -185,14 +188,19 @@ def run_eval(eval_model: str, sample: float, n_jobs: int, options: list, csv_out
         include_hints=include_hints,
         few_shot=few_shot,
         csv_path=csv_output,
+        phases=eval_phases or None,
+        base_url=eval_base_url,
+        api_key=eval_api_key,
     )
 
 
-def run_training(phase: str, model_name: str, epochs: int, save_steps: int, max_seq_length: int, finetune_type: str, continue_run: str = None):
+def run_training(phase: str, model_name: str, epochs: int, save_steps: int, max_seq_length: int, finetune_type: str, batch_size: int, grad_accum_steps: int, keep_checkpoints: int, continue_run: str = None):
     print(f"=== Starting Training for phase: {phase} ===")
     print(f"Base Model: {model_name}")
     print(f"Finetune Type: {finetune_type}")
     print(f"Epochs: {epochs}, Save Steps: {save_steps}")
+    print(f"Batch Size: {batch_size}, Gradient Accumulation Steps: {grad_accum_steps} (effective batch size: {batch_size * grad_accum_steps})")
+    print(f"Keep Checkpoints: {keep_checkpoints}")
     if continue_run:
         print(f"Resuming Run: {continue_run}")
     
@@ -214,6 +222,9 @@ def run_training(phase: str, model_name: str, epochs: int, save_steps: int, max_
         phase=phase,
         epochs=epochs,
         save_steps=save_steps,
+        batch_size=batch_size,
+        gradient_accumulation_steps=grad_accum_steps,
+        keep_checkpoints=keep_checkpoints,
         continue_run=continue_run
     )
     print(f"Successfully trained and loaded finetuned model: {finetuned_model}")
@@ -268,6 +279,25 @@ def main():
         help="Finetuning type: lora or full (default: lora)"
     )
     parser.add_argument(
+        "--batch_size",
+        type=int,
+        default=1,
+        help="Per-device train batch size (default: 1). Raise this if you have spare VRAM."
+    )
+    parser.add_argument(
+        "--grad_accum_steps",
+        type=int,
+        default=4,
+        help="Gradient accumulation steps (default: 4). Effective batch size = batch_size * grad_accum_steps."
+    )
+    parser.add_argument(
+        "--keep_checkpoints",
+        type=int,
+        default=2,
+        help="Max number of checkpoints to keep on disk, lowest-loss ones are kept (default: 2). "
+             "Lower this for full finetuning, where each checkpoint (model + optimizer state) can be tens of GB."
+    )
+    parser.add_argument(
         "--continue",
         dest="continue_run",
         type=str,
@@ -287,6 +317,14 @@ def main():
         help="Sample rate of the test set to evaluate, as a float ratio in (0, 1] (default: 1.0)"
     )
     parser.add_argument(
+        "--eval_phases",
+        nargs="*",
+        choices=["entity", "event", "argument", "pipeline", "full"],
+        default=[],
+        help="Subset of eval phases to run: entity, event, argument, pipeline, full "
+             "(default: all five)"
+    )
+    parser.add_argument(
         "--options",
         nargs="*",
         choices=["include_hints", "few_shot"],
@@ -300,6 +338,20 @@ def main():
         default="eval_results.csv",
         help="Path to the CSV file eval results are appended to (default: eval_results.csv)"
     )
+    parser.add_argument(
+        "--eval_base_url",
+        type=str,
+        default=None,
+        help="OpenAI-compatible base URL to evaluate against instead of OpenRouter or loading a local "
+             "checkpoint directly, e.g. a local vLLM server (http://localhost:8000/v1). "
+             "--eval_model is then treated as the served model name. Supports full --n_jobs concurrency."
+    )
+    parser.add_argument(
+        "--eval_api_key",
+        type=str,
+        default=None,
+        help="API key for --eval_base_url, if required (default: dummy value, vLLM does not check it)"
+    )
 
     args = parser.parse_args()
 
@@ -311,7 +363,10 @@ def main():
             sample=args.sample,
             n_jobs=args.n_jobs,
             options=args.options,
-            csv_output=args.csv_output
+            csv_output=args.csv_output,
+            eval_phases=args.eval_phases,
+            eval_base_url=args.eval_base_url,
+            eval_api_key=args.eval_api_key
         )
     elif args.train:
         run_training(
@@ -321,6 +376,9 @@ def main():
             save_steps=args.save_steps,
             max_seq_length=args.max_seq_length,
             finetune_type=args.finetune_type,
+            batch_size=args.batch_size,
+            grad_accum_steps=args.grad_accum_steps,
+            keep_checkpoints=args.keep_checkpoints,
             continue_run=args.continue_run
         )
     else:

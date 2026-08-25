@@ -199,11 +199,14 @@ class Trainer:
                 self.model = get_peft_model(self.model, peft_config)
 
     def train(
-        self, 
+        self,
         dataset: Union[EntityReasoningDataset, EventReasoningDataset, ArgumentReasoningDataset, FullReasoningDataset],
-        phase: Literal["entity", "event", "argument", "full"], 
+        phase: Literal["entity", "event", "argument", "full"],
         epochs: int = 2,
         save_steps: int = 500,
+        batch_size: int = 1,
+        gradient_accumulation_steps: int = 4,
+        keep_checkpoints: int = 2,
         continue_run: Optional[str] = None
     ) -> Union[EntityExtractorModel, EventExtractorModel, ArgumentAssignerModel, FullModel]:
         # Determine the project root directory
@@ -240,7 +243,7 @@ class Trainer:
         print(f"Successfully processed and formatted {len(formatted_dataset)} samples.")
         
         # Print estimated steps for visibility
-        effective_batch_size = 4  # batch_size=1 * grad_accum=4
+        effective_batch_size = batch_size * gradient_accumulation_steps
         estimated_steps_per_epoch = len(formatted_dataset) // effective_batch_size
         estimated_total_steps = estimated_steps_per_epoch * epochs
         print(f"Estimated steps: ~{estimated_steps_per_epoch}/epoch × {epochs} epochs = ~{estimated_total_steps} total steps")
@@ -302,8 +305,8 @@ class Trainer:
                     dataset_text_field = "text",
                     max_seq_length = self.max_seq_length,
                     packing = False,
-                    per_device_train_batch_size = 1,
-                    gradient_accumulation_steps = 4,
+                    per_device_train_batch_size = batch_size,
+                    gradient_accumulation_steps = gradient_accumulation_steps,
                     warmup_steps = 100,
                     **mlx_epoch_or_steps,
                     learning_rate = 2e-5,
@@ -341,7 +344,7 @@ class Trainer:
                     trainer.save_model(ckpt_dir)
                     
                     saved_checkpoints.append((actual_step, train_loss))
-                    prune_checkpoints(output_dir, saved_checkpoints, keep_limit=10)
+                    prune_checkpoints(output_dir, saved_checkpoints, keep_limit=keep_checkpoints)
 
             trainer._step_callbacks.append(mlx_step_callback)
             
@@ -356,7 +359,7 @@ class Trainer:
             if self.device_type == "cuda":
                 has_bf16 = torch.cuda.is_bf16_supported()
                 
-            callbacks = [CheckpointPruningCallback(output_dir, 10)]
+            callbacks = [CheckpointPruningCallback(output_dir, keep_checkpoints)]
                 
             trainer = SFTTrainer(
                 model = self.model,
@@ -367,8 +370,8 @@ class Trainer:
                     dataset_text_field = "text",
                     max_seq_length = self.max_seq_length,
                     packing = False,
-                    per_device_train_batch_size = 1,
-                    gradient_accumulation_steps = 4,
+                    per_device_train_batch_size = batch_size,
+                    gradient_accumulation_steps = gradient_accumulation_steps,
                     warmup_steps = 100,
                     num_train_epochs = epochs,
                     learning_rate = 2e-5,

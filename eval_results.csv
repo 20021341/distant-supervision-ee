@@ -1,0 +1,19 @@
+timestamp,model,model_source,phase,sample_rate,n_samples,options,duration_seconds,precision,recall,f1,output_file
+2026-08-22T03:40:13.071874+00:00,inclusionai/ling-3.0-flash,openrouter,entity,1.0,4301,"include_hints,few_shot",1239.38,0.1343,0.7147,0.2261,eval_outputs/ling-3.0-flash__entity__20260822T031933Z.jsonl
+2026-08-22T04:08:17.303154+00:00,inclusionai/ling-3.0-flash,openrouter,event,1.0,4301,"include_hints,few_shot",1684.2,0.2775,0.8203,0.4147,eval_outputs/ling-3.0-flash__event__20260822T031933Z.jsonl
+2026-08-22T04:13:11.216865+00:00,inclusionai/ling-3.0-flash,openrouter,argument,1.0,4301,"include_hints,few_shot",293.88,0.7942,0.9164,0.8509,eval_outputs/ling-3.0-flash__argument__20260822T031933Z.jsonl
+2026-08-22T05:13:23.931808+00:00,inclusionai/ling-3.0-flash,openrouter,pipeline,1.0,4301,"include_hints,few_shot",3612.65,0.1565,0.6986,0.2557,eval_outputs/ling-3.0-flash__pipeline__20260822T031933Z.jsonl
+2026-08-22T05:41:05.523370+00:00,inclusionai/ling-3.0-flash,openrouter,full,1.0,4301,"include_hints,few_shot",1661.55,0.1632,0.3793,0.2282,eval_outputs/ling-3.0-flash__full__20260822T031933Z.jsonl
+2026-08-22T10:34:28.571188+00:00,stealth/ox-alpha,openrouter,entity,1.0,4301,"include_hints,few_shot",9947.53,0.1296,0.7869,0.2225,eval_outputs/ox-alpha__entity__20260822T074841Z.jsonl
+2026-08-22T13:39:34.280836+00:00,stealth/ox-alpha,openrouter,event,1.0,4301,"include_hints,few_shot",11105.68,0.2658,0.8785,0.4081,eval_outputs/ox-alpha__event__20260822T074841Z.jsonl
+2026-08-22T15:05:21.981469+00:00,stealth/ox-alpha,openrouter,argument,1.0,4301,"include_hints,few_shot",5147.68,0.844,0.9183,0.8796,eval_outputs/ox-alpha__argument__20260822T074841Z.jsonl
+2026-08-23T06:05:01.306994+00:00,stealth/ox-alpha,openrouter,pipeline,1.0,4301,"include_hints,few_shot",53979.27,0.1559,0.7598,0.2587,eval_outputs/ox-alpha__pipeline__20260822T074841Z.jsonl
+2026-08-23T11:49:02.078028+00:00,stealth/ox-alpha,openrouter,full,1.0,4301,"include_hints,few_shot",20640.72,0.1658,0.7414,0.2709,eval_outputs/ox-alpha__full__20260822T074841Z.jsonl
+2026-08-24T09:18:19.000411+00:00,event-finetuned,vllm,event,1.0,4301,n/a (finetuned checkpoint uses fixed system prompts),721.69,0.4599,0.7333,0.5653,eval_outputs/event-finetuned__event__20260824T090617Z.jsonl
+2026-08-24T04:16:43.697890+00:00,full-finetuned,vllm,full,1.0,4301,n/a (finetuned checkpoint uses fixed system prompts),724.28,0.3729,0.5602,0.4478,eval_outputs/full-finetuned__full__20260824T040439Z.jsonl
+2026-08-24T09:46:56.051013+00:00,google/gemma-4-31b-it,openrouter,entity,1.0,4301,"include_hints,few_shot",2692.53,0.1344,0.7747,0.2291,eval_outputs/gemma-4-31b-it__entity__20260824T090203Z.jsonl
+2026-08-24T10:19:43.689165+00:00,google/gemma-4-31b-it,openrouter,event,1.0,4301,"include_hints,few_shot",1967.61,0.3326,0.8099,0.4716,eval_outputs/gemma-4-31b-it__event__20260824T090203Z.jsonl
+2026-08-24T10:32:45.019590+00:00,google/gemma-4-31b-it,openrouter,argument,1.0,4301,"include_hints,few_shot",781.31,0.8489,0.9126,0.8796,eval_outputs/gemma-4-31b-it__argument__20260824T090203Z.jsonl
+2026-08-24T11:57:45.585843+00:00,openai/gpt-oss-20b,openrouter,entity,1.0,4301,"include_hints,few_shot",11189.51,0.1393,0.7513,0.235,eval_outputs/gpt-oss-20b__entity__20260824T085116Z.jsonl
+2026-08-24T13:41:40.398992+00:00,openai/gpt-oss-20b,openrouter,event,1.0,4301,"include_hints,few_shot",6234.78,0.2905,0.7062,0.4116,eval_outputs/gpt-oss-20b__event__20260824T085116Z.jsonl
+2026-08-24T13:57:27.310004+00:00,openai/gpt-oss-20b,openrouter,argument,1.0,4301,"include_hints,few_shot",946.89,0.7882,0.6976,0.7401,eval_outputs/gpt-oss-20b__argument__20260824T085116Z.jsonl

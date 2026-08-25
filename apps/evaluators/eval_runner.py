@@ -5,7 +5,7 @@ import re
 import time
 import logging
 from datetime import datetime, timezone
-from typing import List, Union, Dict, Any
+from typing import List, Union, Dict, Any, Optional
 
 from pydantic import BaseModel
 
@@ -99,6 +99,9 @@ def run_evaluation(
     csv_path: str = "eval_results.csv",
     output_dir: str = "eval_outputs",
     max_seq_length: int = 2048,
+    phases: Optional[List[str]] = None,
+    base_url: Optional[str] = None,
+    api_key: Optional[str] = None,
 ) -> List[Dict[str, Any]]:
     """
     Runs entity, event, argument, pipeline (entity -> event -> argument) and
@@ -107,17 +110,25 @@ def run_evaluation(
     each phase to a JSONL file under `output_dir`.
 
     `eval_model` is either an OpenRouter model identifier, or an absolute/relative
-    path to a finetuned checkpoint.
+    path to a finetuned checkpoint. Pass `base_url` to instead hit any OpenAI-compatible
+    HTTP endpoint (e.g. a local vLLM server) with `eval_model` as the served model name --
+    this uses the same fixed finetuned system prompts as a local checkpoint, since the
+    served model is assumed to be a finetuned checkpoint too, and supports full
+    concurrency (`n_jobs`) since the server handles request batching itself.
+
+    `phases`: subset of {"entity", "event", "argument", "pipeline", "full"} to run.
+    Defaults to all five when omitted/empty.
     """
-    is_local = os.path.exists(eval_model)
-    model_source = "local_checkpoint" if is_local else "openrouter"
+    is_served = base_url is not None
+    is_local = (not is_served) and os.path.exists(eval_model)
+    model_source = "vllm" if is_served else ("local_checkpoint" if is_local else "openrouter")
     logger.info(f"=== Starting evaluation for model: {eval_model} ({model_source}) ===")
 
     dataset = load_base_dataset("test")
     n_records = len(dataset.items)
     n_samples = int(n_records * sample) if isinstance(sample, float) else min(sample, n_records)
 
-    if is_local:
+    if is_served or is_local:
         options_label = "n/a (finetuned checkpoint uses fixed system prompts)"
     else:
         enabled = [name for name, flag in [("include_hints", include_hints), ("few_shot", few_shot)] if flag]
@@ -127,7 +138,14 @@ def run_evaluation(
     model_slug = _slugify(os.path.basename(eval_model.rstrip("/\\")) or eval_model)
 
     finetuned_model = None
-    if is_local:
+    if is_served:
+        caller = make_llm_caller(eval_model, base_url=base_url, api_key=api_key)
+
+        entity_extractor = EntityExtractor(llm_caller_func=caller, system_prompt=FINETUNED_ENTITIES_SYSTEM_PROMPT)
+        event_extractor = EventExtractor(llm_caller_func=caller, system_prompt=FINETUNED_EVENTS_SYSTEM_PROMPT)
+        argument_assigner = ArgumentAssigner(llm_caller_func=caller, system_prompt=FINETUNED_ARGUMENTS_SYSTEM_PROMPT)
+        full_extractor = FullExtractor(llm_caller_func=caller, system_prompt=FINETUNED_FULL_SYSTEM_PROMPT)
+    elif is_local:
         if n_jobs != 1:
             logger.warning("Local checkpoint inference is not thread-safe; forcing n_jobs=1.")
         n_jobs = 1
@@ -155,17 +173,23 @@ def run_evaluation(
         argument_assigner=argument_assigner,
     )
 
-    phases = [
+    all_phases = [
         ("entity", EntityEvaluator(extractor=entity_extractor)),
         ("event", EventEvaluator(extractor=event_extractor)),
         ("argument", ArgumentEvaluator(assigner=argument_assigner)),
         ("pipeline", PipelineEvaluator(extractor=pipeline_extractor)),
         ("full", FullEvaluator(extractor=full_extractor)),
     ]
+    selected_phases = set(phases) if phases else {name for name, _ in all_phases}
+    unknown_phases = selected_phases - {name for name, _ in all_phases}
+    if unknown_phases:
+        raise ValueError(f"Unknown eval phase(s): {sorted(unknown_phases)}")
+    phases_to_run = [(name, ev) for name, ev in all_phases if name in selected_phases]
+    logger.info(f"Phases to run: {[name for name, _ in phases_to_run]}")
 
     results = []
     try:
-        for phase, evaluator in phases:
+        for phase, evaluator in phases_to_run:
             logger.info(f"--- Running eval phase: {phase} ---")
             start = time.time()
             precision, recall, f1 = evaluator.evaluate(dataset, sample=sample, n_jobs=n_jobs)

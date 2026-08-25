@@ -69,12 +69,20 @@ def call_llm_json(system_prompt: str, user_prompt: str, **kwargs) -> Tuple[str, 
     return response.choices[0].message.content, parse_llm_json(response.choices[0].message.content)
 
 
-def make_llm_caller(model: str):
-    """Builds a call_llm_json-compatible function bound to a specific OpenRouter model identifier."""
+def make_llm_caller(model: str, base_url: str = None, api_key: str = None):
+    """
+    Builds a call_llm_json-compatible function bound to a specific model identifier.
+
+    By default hits the configured OpenRouter client. Pass `base_url` (and optionally
+    `api_key`) to instead target any other OpenAI-compatible endpoint, e.g. a local
+    vLLM server (base_url="http://localhost:8000/v1", api_key can be left as a dummy
+    value since vLLM does not enforce it).
+    """
+    client = CLIENT if base_url is None else OpenAI(base_url=base_url, api_key=api_key or "EMPTY")
 
     @retry(max_attempts=3)
     def _call(system_prompt: str, user_prompt: str, **kwargs) -> Tuple[str, Dict[str, Any]]:
-        response = CLIENT.chat.completions.create(
+        response = client.chat.completions.create(
             model=model,
             messages=[
                 {"role": "system", "content": system_prompt},
