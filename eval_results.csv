@@ -16,10 +16,10 @@ timestamp,model,model_source,phase,sample_rate,n_samples,options,duration_second
 2026-08-24T09:46:56.051013+00:00,google/gemma-4-31b-it,openrouter,entity,1.0,4301,"include_hints,few_shot",2692.53,0.1344,0.7747,0.2291,eval_outputs/gemma-4-31b-it__entity__20260824T090203Z.jsonl
 2026-08-24T10:19:43.689165+00:00,google/gemma-4-31b-it,openrouter,event,1.0,4301,"include_hints,few_shot",1967.61,0.3326,0.8099,0.4716,eval_outputs/gemma-4-31b-it__event__20260824T090203Z.jsonl
 2026-08-24T10:32:45.019590+00:00,google/gemma-4-31b-it,openrouter,argument,1.0,4301,"include_hints,few_shot",781.31,0.8489,0.9126,0.8796,eval_outputs/gemma-4-31b-it__argument__20260824T090203Z.jsonl
+2026-08-25T07:31:08.310883+00:00,google/gemma-4-31b-it,openrouter,pipeline,1.0,4301,"include_hints,few_shot",2661.29,0.1813,0.7183,0.2896,eval_outputs/gemma-4-31b-it__pipeline__20260825T064646Z.jsonl
 2026-08-25T05:11:16.744380+00:00,google/gemma-4-31b-it,openrouter,full,1.0,4301,"include_hints,few_shot",9256.71,0.1939,0.6883,0.3026,eval_outputs/gemma-4-31b-it__full__20260825T023659Z.jsonl
 2026-08-24T11:57:45.585843+00:00,openai/gpt-oss-20b,openrouter,entity,1.0,4301,"include_hints,few_shot",11189.51,0.1393,0.7513,0.235,eval_outputs/gpt-oss-20b__entity__20260824T085116Z.jsonl
 2026-08-24T13:41:40.398992+00:00,openai/gpt-oss-20b,openrouter,event,1.0,4301,"include_hints,few_shot",6234.78,0.2905,0.7062,0.4116,eval_outputs/gpt-oss-20b__event__20260824T085116Z.jsonl
 2026-08-24T13:57:27.310004+00:00,openai/gpt-oss-20b,openrouter,argument,1.0,4301,"include_hints,few_shot",946.89,0.7882,0.6976,0.7401,eval_outputs/gpt-oss-20b__argument__20260824T085116Z.jsonl
-2026-08-25T07:31:08.310883+00:00,google/gemma-4-31b-it,openrouter,pipeline,1.0,4301,"include_hints,few_shot",2661.29,0.1813,0.7183,0.2896,eval_outputs/gemma-4-31b-it__pipeline__20260825T064646Z.jsonl
-2026-08-25T08:21:54.962935+00:00,openai/gpt-oss-20b,openrouter,full,1.0,4301,"include_hints,few_shot",20703.08,0.1503,0.5403,0.2352,eval_outputs/gpt-oss-20b__full__20260825T023651Z.jsonl
 2026-08-25T10:05:46.214957+00:00,openai/gpt-oss-20b,openrouter,pipeline,1.0,4301,"include_hints,few_shot",4454.23,0.1656,0.648,0.2638,eval_outputs/gpt-oss-20b__pipeline__20260825T085131Z.jsonl
+2026-08-25T08:21:54.962935+00:00,openai/gpt-oss-20b,openrouter,full,1.0,4301,"include_hints,few_shot",20703.08,0.1503,0.5403,0.2352,eval_outputs/gpt-oss-20b__full__20260825T023651Z.jsonl

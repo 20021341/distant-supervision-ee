@@ -11,4 +11,4 @@ test.ipynb
 checkpoints/
 *cache/
 dataset/
-dataset.zip
+*.zip
