@@ -112,7 +112,7 @@ def build_full_system_prompt(include_hints: bool = True, few_shot: bool = False)
 
     return prompt
 
-def build_entities_builder_system_prompt(include_hints: bool = True):
+def build_entities_builder_system_prompt(include_hints: bool = True, few_shot: bool = True):
     entity_types_text = ""
     for index, entity_type in enumerate(ENTITY_TYPES, start=1):
         entity_types_text += f"{index}. {entity_type}\n"
@@ -123,9 +123,12 @@ def build_entities_builder_system_prompt(include_hints: bool = True):
         entity_types_text=entity_types_text
     )
 
+    if few_shot:
+        prompt += "\n\n## VÍ DỤ MẪU THAM KHẢO:\n" + ENTITIES_FEW_SHOT_EXAMPLES
+
     return prompt
 
-def build_events_builder_system_prompt(include_hints: bool = True):
+def build_events_builder_system_prompt(include_hints: bool = True, few_shot: bool = True):
     event_types_text = ""
     for index, event_type in enumerate(EVENT_TYPES, start=1):
         event_types_text += f"{index}. {event_type}\n"
@@ -136,10 +139,18 @@ def build_events_builder_system_prompt(include_hints: bool = True):
         event_types_text=event_types_text
     )
 
+    if few_shot:
+        prompt += "\n\n## VÍ DỤ MẪU THAM KHẢO:\n" + EVENTS_FEW_SHOT_EXAMPLES
+
     return prompt
 
-def build_arguments_builder_system_prompt():
-    return EVENT_ARGUMENTS_BUILDER_SYSTEM_PROMPT_TEMPLATE
+def build_arguments_builder_system_prompt(few_shot: bool = True):
+    prompt = EVENT_ARGUMENTS_BUILDER_SYSTEM_PROMPT_TEMPLATE
+
+    if few_shot:
+        prompt += "\n\n## VÍ DỤ MẪU THAM KHẢO:\n" + EVENT_ARGUMENTS_FEW_SHOT_EXAMPLES
+
+    return prompt
 
 def build_arguments_builder_user_prompt(
     sentence: str,
@@ -159,7 +170,7 @@ def build_arguments_builder_user_prompt(
 
     return base_user_prompt + f"- Danh sách đối số mục tiêu: {gold_args_json}\n"
 
-def build_full_builder_system_prompt(include_hints: bool = True):
+def build_full_builder_system_prompt(include_hints: bool = True, few_shot: bool = True):
     entity_types_text = ""
     for index, entity_type in enumerate(ENTITY_TYPES, start=1):
         entity_types_text += f"{index}. {entity_type}\n"
@@ -183,5 +194,8 @@ def build_full_builder_system_prompt(include_hints: bool = True):
         event_types_text=event_types_text,
         argument_types_text=argument_types_text
     )
+
+    if few_shot:
+        prompt += "\n\n## VÍ DỤ MẪU THAM KHẢO:\n" + FULL_FEW_SHOT_EXAMPLES
 
     return prompt
