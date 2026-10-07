@@ -112,18 +112,55 @@ Configure your API keys in a `.env` file in the root directory:
 GEMINI_API_KEY="your-gemini-api-key"
 ```
 
-### 3. Running Data Generation
-Generate reasoning datasets for a specific phase (`entity`, `event`, `argument`, or `full`):
+`main.py` is organized into three subcommands: `build`, `train`, and `evaluate`. Run `python main.py <subcommand> --help` for the full flag list of each.
+
+### 3. Building the Reasoning Dataset
+Generate a silver reasoning dataset for a specific phase (`entity`, `event`, `argument`, or `full`):
 ```bash
-python main.py --build_data full --n_jobs 4
+python main.py build --phase full --concurrency 4
 ```
 *Note: If a process is stopped, running the same command again will resume from the last completed sentence.*
+
+To re-run only the records that previously failed (reasoning starting with `[LỖI]`), across both the train and test splits:
+```bash
+python main.py build --phase full --retry_errors --concurrency 4
+```
 
 ### 4. Model Training
 Run fine-tuning on the generated datasets:
 ```bash
-python main.py --train --phase full --max_steps 600
+python main.py train --phase full --epochs 2 --finetune_type lora
 ```
+Key flags: `--model_name` (base model, default `Qwen/Qwen3-4B-Instruct-2507`), `--epochs`, `--save_steps`, `--max_seq_length`, `--finetune_type` (`lora` or `full`), `--batch_size`, `--grad_accum_steps`, `--keep_checkpoints`, and `--continue <run_name>` to resume an interrupted run.
+
+### 5. Evaluation
+Evaluate a model on the test split. `--model` can be:
+- an **OpenRouter** model id (e.g. `google/gemma-4-31b-it`),
+- a **local checkpoint path** (loaded directly with `transformers`/`unsloth`), or
+- a model name served behind `--base_url` (any OpenAI-compatible endpoint — vLLM, LM Studio, etc.).
+
+```bash
+# OpenRouter model, prompt-engineered (schema + type hints + few-shot)
+python main.py evaluate --model google/gemma-4-31b-it --sample 1.0 --prompt instruction,type_hints,few_shot
+
+# Local finetuned checkpoint, fixed finetuned system prompt
+python main.py evaluate --model checkpoints/full/final --prompt finetuned
+
+# Model served over HTTP (e.g. vLLM), prompt-engineered
+python main.py evaluate --model qwen3-4b --base_url http://localhost:8000/v1 --concurrency 10 --prompt instruction,type_hints
+```
+
+`--prompt` selects which system prompt to use, independent of where the model is loaded from:
+| Preset | System prompt |
+| :--- | :--- |
+| `finetuned` | Fixed `FINETUNED_*_SYSTEM_PROMPT` (for checkpoints trained via `train`) |
+| `instruction` | `*_SYSTEM_PROMPT_TEMPLATE` with schema only, no type hints |
+| `instruction,type_hints` | Schema + per-type descriptions/examples |
+| `instruction,type_hints,few_shot` | Schema + type hints + few-shot examples |
+
+Other flags: `--sample` (fraction of the test set, default `1.0`), `--concurrency`, `--phases` (subset of `entity event argument pipeline full`, default all five), `--csv_output` (results CSV, default `eval_results.csv`), `--api_key` (for `--base_url`, if required).
+
+Each run appends one row per phase to the results CSV and dumps raw predictions to `eval_outputs/{model}__{prompt}__{phase}__{timestamp}.jsonl`.
 
 ---
 
