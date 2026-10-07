@@ -33,6 +33,15 @@ from apps.evaluators.pipeline_evaluator import PipelineEvaluator
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+# Each preset fully determines which system prompt to use, independent of where the
+# model is loaded from (local checkpoint path, served endpoint, or OpenRouter id).
+PROMPT_PRESETS: Dict[str, Dict[str, bool]] = {
+    "finetuned": {"fixed": True, "include_hints": False, "few_shot": False},
+    "instruction": {"fixed": False, "include_hints": False, "few_shot": False},
+    "instruction,type_hints": {"fixed": False, "include_hints": True, "few_shot": False},
+    "instruction,type_hints,few_shot": {"fixed": False, "include_hints": True, "few_shot": True},
+}
+
 CSV_FIELDNAMES = [
     "timestamp",
     "model",
@@ -157,8 +166,7 @@ def run_evaluation(
     eval_model: str,
     sample: Union[int, float] = 1.0,
     n_jobs: int = 5,
-    include_hints: bool = True,
-    few_shot: bool = False,
+    prompt: str = "finetuned",
     csv_path: str = "eval_results.csv",
     output_dir: str = "eval_outputs",
     max_seq_length: int = 2048,
@@ -172,42 +180,42 @@ def run_evaluation(
     appends one CSV row per phase to `csv_path` and dumps raw predictions for
     each phase to a JSONL file under `output_dir`.
 
-    `eval_model` is either an OpenRouter model identifier, or an absolute/relative
-    path to a finetuned checkpoint. Pass `base_url` to instead hit any OpenAI-compatible
-    HTTP endpoint (e.g. a local vLLM server) with `eval_model` as the served model name --
-    this uses the same fixed finetuned system prompts as a local checkpoint, since the
-    served model is assumed to be a finetuned checkpoint too, and supports full
-    concurrency (`n_jobs`) since the server handles request batching itself.
+    `eval_model` is loaded from disk if it's an existing path (a local finetuned
+    checkpoint); otherwise it's treated as a model name to call over the network --
+    via `base_url` if given (any OpenAI-compatible endpoint, e.g. a local vLLM server
+    or LM Studio), or OpenRouter otherwise. This is independent of `prompt`, which
+    picks the system prompt preset from `PROMPT_PRESETS` (see module docstring).
 
     `phases`: subset of {"entity", "event", "argument", "pipeline", "full"} to run.
     Defaults to all five when omitted/empty.
     """
+    if prompt not in PROMPT_PRESETS:
+        raise ValueError(f"Unknown prompt preset {prompt!r}; choose from {sorted(PROMPT_PRESETS)}")
+    preset = PROMPT_PRESETS[prompt]
+    use_fixed_prompt, include_hints, few_shot = preset["fixed"], preset["include_hints"], preset["few_shot"]
+
     is_served = base_url is not None
     is_local = (not is_served) and os.path.exists(eval_model)
     model_source = "vllm" if is_served else ("local_checkpoint" if is_local else "openrouter")
-    logger.info(f"=== Starting evaluation for model: {eval_model} ({model_source}) ===")
+    logger.info(f"=== Starting evaluation for model: {eval_model} ({model_source}), prompt: {prompt} ===")
 
     dataset = load_base_dataset("test")
     n_records = len(dataset.items)
     n_samples = int(n_records * sample) if isinstance(sample, float) else min(sample, n_records)
 
-    if is_served or is_local:
-        options_label = "n/a (finetuned checkpoint uses fixed system prompts)"
-    else:
-        enabled = [name for name, flag in [("include_hints", include_hints), ("few_shot", few_shot)] if flag]
-        options_label = ",".join(enabled) if enabled else "none"
-
     run_timestamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
-    model_slug = _slugify(os.path.basename(eval_model.rstrip("/\\")) or eval_model)
+    # Suffixing with the prompt preset keeps output files (and the pipeline-phase
+    # entity/event prediction cache below) scoped per prompt variant, so runs with
+    # different presets for the same model never collide or get reused across each other.
+    base_model_slug = _slugify(os.path.basename(eval_model.rstrip("/\\")) or eval_model)
+    model_slug = f"{base_model_slug}__{_slugify(prompt)}"
 
+    # Caller selection (where the model lives) and prompt selection (fixed finetuned
+    # vs. prompt-engineered) are independent axes -- build the caller first, then build
+    # extractors the same way for every caller based on `use_fixed_prompt`.
     finetuned_model = None
     if is_served:
         caller = make_llm_caller(eval_model, base_url=base_url, api_key=api_key)
-
-        entity_extractor = EntityExtractor(llm_caller_func=caller, system_prompt=FINETUNED_ENTITIES_SYSTEM_PROMPT)
-        event_extractor = EventExtractor(llm_caller_func=caller, system_prompt=FINETUNED_EVENTS_SYSTEM_PROMPT)
-        argument_assigner = ArgumentAssigner(llm_caller_func=caller, system_prompt=FINETUNED_ARGUMENTS_SYSTEM_PROMPT)
-        full_extractor = FullExtractor(llm_caller_func=caller, system_prompt=FINETUNED_FULL_SYSTEM_PROMPT)
     elif is_local:
         if n_jobs != 1:
             logger.warning("Local checkpoint inference is not thread-safe; forcing n_jobs=1.")
@@ -216,14 +224,15 @@ def run_evaluation(
         from apps.trainers.inference_models import FinetunedModel
         finetuned_model = FinetunedModel(eval_model, max_seq_length=max_seq_length)
         caller = finetuned_model._llm_call
+    else:
+        caller = make_llm_caller(eval_model)
 
+    if use_fixed_prompt:
         entity_extractor = EntityExtractor(llm_caller_func=caller, system_prompt=FINETUNED_ENTITIES_SYSTEM_PROMPT)
         event_extractor = EventExtractor(llm_caller_func=caller, system_prompt=FINETUNED_EVENTS_SYSTEM_PROMPT)
         argument_assigner = ArgumentAssigner(llm_caller_func=caller, system_prompt=FINETUNED_ARGUMENTS_SYSTEM_PROMPT)
         full_extractor = FullExtractor(llm_caller_func=caller, system_prompt=FINETUNED_FULL_SYSTEM_PROMPT)
     else:
-        caller = make_llm_caller(eval_model)
-
         entity_extractor = EntityExtractor(llm_caller_func=caller, include_hints=include_hints, few_shot=few_shot)
         event_extractor = EventExtractor(llm_caller_func=caller, include_hints=include_hints, few_shot=few_shot)
         argument_assigner = ArgumentAssigner(llm_caller_func=caller, include_hints=include_hints, few_shot=few_shot)
@@ -291,7 +300,7 @@ def run_evaluation(
                 "phase": phase,
                 "sample_rate": sample,
                 "n_samples": n_samples,
-                "options": options_label,
+                "options": prompt,
                 "duration_seconds": round(duration, 2),
                 "precision": round(precision, 4),
                 "recall": round(recall, 4),

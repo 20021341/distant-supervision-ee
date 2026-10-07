@@ -221,12 +221,9 @@ def retry_failed(phase: str, n_jobs: int):
         print(f"[{split}] Retried {len(failed_indices)} records: {len(failed_indices) - still_failed} fixed, {still_failed} still failing. Saved.")
 
 
-def run_eval(eval_model: str, sample: float, n_jobs: int, options: list, csv_output: str, eval_phases: list, eval_base_url: str = None, eval_api_key: str = None):
-    include_hints = "include_hints" in options
-    few_shot = "few_shot" in options
-
+def run_eval(eval_model: str, sample: float, n_jobs: int, prompt: str, csv_output: str, eval_phases: list, eval_base_url: str = None, eval_api_key: str = None):
     print(f"=== Starting Evaluation for model: {eval_model} ===")
-    print(f"Sample rate: {sample}, n_jobs: {n_jobs}, include_hints: {include_hints}, few_shot: {few_shot}")
+    print(f"Sample rate: {sample}, n_jobs: {n_jobs}, prompt: {prompt}")
     print(f"Phases: {eval_phases if eval_phases else 'entity, event, argument, pipeline, full (default)'}")
     if eval_base_url:
         print(f"Serving endpoint: {eval_base_url}")
@@ -236,8 +233,7 @@ def run_eval(eval_model: str, sample: float, n_jobs: int, options: list, csv_out
         eval_model=eval_model,
         sample=sample,
         n_jobs=n_jobs,
-        include_hints=include_hints,
-        few_shot=few_shot,
+        prompt=prompt,
         csv_path=csv_output,
         phases=eval_phases or None,
         base_url=eval_base_url,
@@ -283,153 +279,158 @@ def run_training(phase: str, model_name: str, epochs: int, save_steps: int, max_
 
 def main():
     parser = argparse.ArgumentParser(description="EE Distant Supervision Main Runner")
-    parser.add_argument(
-        "--build_data",
+    subparsers = parser.add_subparsers(dest="command")
+
+    build_parser = subparsers.add_parser("build", help="Build (or retry failed records in) a reasoning dataset")
+    build_parser.add_argument(
+        "--phase",
+        required=True,
         choices=["entity", "event", "argument", "full"],
-        help="Select the phase of dataset to build: entity, event, argument, or full"
+        help="Dataset phase to build: entity, event, argument, or full"
     )
-    parser.add_argument(
-        "--n_jobs",
+    build_parser.add_argument(
+        "--concurrency",
         type=int,
         default=5,
         help="Number of parallel workers for builder queries (default: 5)"
     )
-    parser.add_argument(
+    build_parser.add_argument(
         "--retry_errors",
-        choices=["entity", "event", "argument", "full"],
-        help="Re-run only the records whose reasoning failed (starts with '[LỖI]') for the given phase, "
-             "in-place across both train and test splits"
+        action="store_true",
+        help="Instead of building, re-run only the records whose reasoning failed (starts with "
+             "'[LỖI]') for --phase, in-place across both train and test splits"
     )
-    parser.add_argument(
-        "--train",
+
+    train_parser = subparsers.add_parser("train", help="Finetune a model on a reasoning dataset phase")
+    train_parser.add_argument(
+        "--phase",
+        required=True,
         choices=["entity", "event", "argument", "full"],
-        help="Select the phase to train: entity, event, argument, or full"
+        help="Dataset phase to train on: entity, event, argument, or full"
     )
-    parser.add_argument(
+    train_parser.add_argument(
         "--model_name",
         type=str,
         default="Qwen/Qwen3-4B-Instruct-2507",
         help="Base model to finetune (default: Qwen/Qwen3-4B-Instruct-2507)"
     )
-    parser.add_argument(
+    train_parser.add_argument(
         "--epochs",
         type=int,
         default=2,
         help="Number of training epochs (default: 2)"
     )
-    parser.add_argument(
+    train_parser.add_argument(
         "--save_steps",
         type=int,
         default=500,
         help="Save steps interval (default: 500)"
     )
-    parser.add_argument(
+    train_parser.add_argument(
         "--max_seq_length",
         type=int,
         default=2048,
         help="Maximum sequence length (default: 2048)"
     )
-    parser.add_argument(
+    train_parser.add_argument(
         "--finetune_type",
         choices=["lora", "full"],
         default="lora",
         help="Finetuning type: lora or full (default: lora)"
     )
-    parser.add_argument(
+    train_parser.add_argument(
         "--batch_size",
         type=int,
         default=1,
         help="Per-device train batch size (default: 1). Raise this if you have spare VRAM."
     )
-    parser.add_argument(
+    train_parser.add_argument(
         "--grad_accum_steps",
         type=int,
         default=4,
         help="Gradient accumulation steps (default: 4). Effective batch size = batch_size * grad_accum_steps."
     )
-    parser.add_argument(
+    train_parser.add_argument(
         "--keep_checkpoints",
         type=int,
         default=2,
         help="Max number of checkpoints to keep on disk, lowest-loss ones are kept (default: 2). "
              "Lower this for full finetuning, where each checkpoint (model + optimizer state) can be tens of GB."
     )
-    parser.add_argument(
+    train_parser.add_argument(
         "--continue",
         dest="continue_run",
         type=str,
         default=None,
         help="Continue training from a run folder name or path (e.g. run--2026-07-09--09-34-18)"
     )
-    parser.add_argument(
-        "--eval_model",
+
+    eval_parser = subparsers.add_parser("evaluate", help="Evaluate a model (OpenRouter, served endpoint, or local checkpoint) on the test split")
+    eval_parser.add_argument(
+        "--model",
+        required=True,
         type=str,
-        default=None,
         help="Model to evaluate: an OpenRouter model identifier, or an absolute/relative path to a finetuned checkpoint"
     )
-    parser.add_argument(
+    eval_parser.add_argument(
         "--sample",
         type=float,
         default=1.0,
         help="Sample rate of the test set to evaluate, as a float ratio in (0, 1] (default: 1.0)"
     )
-    parser.add_argument(
-        "--eval_phases",
+    eval_parser.add_argument(
+        "--concurrency",
+        type=int,
+        default=5,
+        help="Number of parallel workers for evaluation queries (default: 5)"
+    )
+    eval_parser.add_argument(
+        "--phases",
         nargs="*",
         choices=["entity", "event", "argument", "pipeline", "full"],
         default=[],
         help="Subset of eval phases to run: entity, event, argument, pipeline, full "
              "(default: all five)"
     )
-    parser.add_argument(
-        "--options",
-        nargs="*",
-        choices=["include_hints", "few_shot"],
-        default=[],
-        help="Extra system prompt options for OpenRouter-based evaluation: include_hints and/or few_shot "
-             "(ignored for local finetuned checkpoints, which always use their fixed finetuned system prompt)"
+    eval_parser.add_argument(
+        "--prompt",
+        choices=["finetuned", "instruction", "instruction,type_hints", "instruction,type_hints,few_shot"],
+        default="finetuned",
+        help="System prompt preset: 'finetuned' uses the fixed FINETUNED_* system prompt (for "
+             "finetuned checkpoints); the others build *_SYSTEM_PROMPT_TEMPLATE with just the "
+             "entity/event/argument schema ('instruction'), schema + type hints, or schema + type "
+             "hints + few-shot examples (default: finetuned)"
     )
-    parser.add_argument(
+    eval_parser.add_argument(
         "--csv_output",
         type=str,
         default="eval_results.csv",
         help="Path to the CSV file eval results are appended to (default: eval_results.csv)"
     )
-    parser.add_argument(
-        "--eval_base_url",
+    eval_parser.add_argument(
+        "--base_url",
         type=str,
         default=None,
         help="OpenAI-compatible base URL to evaluate against instead of OpenRouter or loading a local "
              "checkpoint directly, e.g. a local vLLM server (http://localhost:8000/v1). "
-             "--eval_model is then treated as the served model name. Supports full --n_jobs concurrency."
+             "--model is then treated as the served model name. Supports full --concurrency."
     )
-    parser.add_argument(
-        "--eval_api_key",
+    eval_parser.add_argument(
+        "--api_key",
         type=str,
         default=None,
-        help="API key for --eval_base_url, if required (default: dummy value, vLLM does not check it)"
+        help="API key for --base_url, if required (default: dummy value, vLLM does not check it)"
     )
-
     args = parser.parse_args()
 
-    if args.build_data:
-        build_data(args.build_data, args.n_jobs)
-    elif args.retry_errors:
-        retry_failed(args.retry_errors, args.n_jobs)
-    elif args.eval_model:
-        run_eval(
-            eval_model=args.eval_model,
-            sample=args.sample,
-            n_jobs=args.n_jobs,
-            options=args.options,
-            csv_output=args.csv_output,
-            eval_phases=args.eval_phases,
-            eval_base_url=args.eval_base_url,
-            eval_api_key=args.eval_api_key
-        )
-    elif args.train:
+    if args.command == "build":
+        if args.retry_errors:
+            retry_failed(args.phase, args.concurrency)
+        else:
+            build_data(args.phase, args.concurrency)
+    elif args.command == "train":
         run_training(
-            phase=args.train,
+            phase=args.phase,
             model_name=args.model_name,
             epochs=args.epochs,
             save_steps=args.save_steps,
@@ -439,6 +440,17 @@ def main():
             grad_accum_steps=args.grad_accum_steps,
             keep_checkpoints=args.keep_checkpoints,
             continue_run=args.continue_run
+        )
+    elif args.command == "evaluate":
+        run_eval(
+            eval_model=args.model,
+            sample=args.sample,
+            n_jobs=args.concurrency,
+            prompt=args.prompt,
+            csv_output=args.csv_output,
+            eval_phases=args.phases,
+            eval_base_url=args.base_url,
+            eval_api_key=args.api_key,
         )
     else:
         parser.print_help()
