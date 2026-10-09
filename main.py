@@ -223,6 +223,11 @@ def retry_failed(phase: str, n_jobs: int):
 
 def run_eval(eval_model: str, sample: float, n_jobs: int, prompt: str, csv_output: str, eval_phases: list, eval_base_url: str = None, eval_api_key: str = None):
     print(f"=== Starting Evaluation for model: {eval_model} ===")
+    from apps.constants import MODEL_PRESETS
+    if eval_model in MODEL_PRESETS:
+        print(f"Using model preset: '{eval_model}' with checkpoint mapping:")
+        for task, ckpt in MODEL_PRESETS[eval_model].items():
+            print(f"  - {task:10s} -> {ckpt}")
     print(f"Sample rate: {sample}, n_jobs: {n_jobs}, prompt: {prompt}")
     print(f"Phases: {eval_phases if eval_phases else 'entity, event, argument, pipeline, full (default)'}")
     if eval_base_url:
@@ -370,7 +375,8 @@ def main():
         "--model",
         required=True,
         type=str,
-        help="Model to evaluate: an OpenRouter model identifier, or an absolute/relative path to a finetuned checkpoint"
+        help="Model to evaluate: a preset name ('finetuned'), an OpenRouter model identifier, "
+             "or an absolute/relative path to a finetuned checkpoint"
     )
     eval_parser.add_argument(
         "--sample",

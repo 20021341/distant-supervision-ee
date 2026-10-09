@@ -18,6 +18,7 @@ from apps.constants import (
     FINETUNED_EVENTS_SYSTEM_PROMPT,
     FINETUNED_ARGUMENTS_SYSTEM_PROMPT,
     FINETUNED_FULL_SYSTEM_PROMPT,
+    MODEL_PRESETS,
 )
 from apps.extractors.entity_extractor import EntityExtractor
 from apps.extractors.event_extractor import EventExtractor
@@ -73,20 +74,23 @@ def _slugify(value: str) -> str:
     return slug.strip("_") or "model"
 
 
-def _dump_predictions(evaluator: Any, output_path: str) -> None:
-    sentences = getattr(evaluator, "last_sentences", [])
-    predictions = getattr(evaluator, "last_predictions", [])
-    gold = getattr(evaluator, "last_gold", [])
-
+def _dump_rows(sentences: List[str], predictions: List[Any], gold: Optional[List[Any]], output_path: str) -> None:
     os.makedirs(os.path.dirname(os.path.abspath(output_path)), exist_ok=True)
     with open(output_path, "w", encoding="utf-8") as f:
         for i in range(len(predictions)):
             row = {
                 "sentence": sentences[i] if i < len(sentences) else None,
                 "prediction": _to_jsonable(predictions[i]),
-                "gold": _to_jsonable(gold[i]) if i < len(gold) else None,
+                "gold": _to_jsonable(gold[i]) if (gold and i < len(gold)) else None,
             }
             f.write(json.dumps(row, ensure_ascii=False) + "\n")
+
+
+def _dump_predictions(evaluator: Any, output_path: str) -> None:
+    sentences = getattr(evaluator, "last_sentences", [])
+    predictions = getattr(evaluator, "last_predictions", [])
+    gold = getattr(evaluator, "last_gold", [])
+    _dump_rows(sentences, predictions, gold, output_path)
 
 
 def _find_latest_output_file(output_dir: str, model_slug: str, phase: str) -> Optional[str]:
@@ -162,6 +166,122 @@ def _append_csv_row(csv_path: str, row: Dict[str, Any]) -> None:
         writer.writerow(row)
 
 
+def _resolve_checkpoint_path(path: str) -> str:
+    if os.path.exists(path):
+        return path
+    project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
+    candidate = os.path.join(project_root, path)
+    if os.path.exists(candidate):
+        return candidate
+    alt1 = os.path.join(path, "final")
+    if os.path.exists(alt1):
+        return alt1
+    alt2 = os.path.join(candidate, "final")
+    if os.path.exists(alt2):
+        return alt2
+    return path
+
+
+def _create_caller(
+    model_name_or_path: str,
+    base_url: Optional[str] = None,
+    api_key: Optional[str] = None,
+    max_seq_length: int = 2048,
+) -> Tuple[Any, Optional[Any], str]:
+    """
+    Returns (caller, finetuned_model_instance, model_source).
+    If local checkpoint, finetuned_model_instance is returned so caller can manage its lifecycle/unload.
+    """
+    is_served = base_url is not None
+    resolved_path = _resolve_checkpoint_path(model_name_or_path)
+    is_local = (not is_served) and os.path.exists(resolved_path)
+    model_source = "vllm" if is_served else ("local_checkpoint" if is_local else "openrouter")
+
+    finetuned_model = None
+    if is_served:
+        caller = make_llm_caller(model_name_or_path, base_url=base_url, api_key=api_key)
+    elif is_local:
+        from apps.trainers.inference_models import FinetunedModel
+        finetuned_model = FinetunedModel(resolved_path, max_seq_length=max_seq_length)
+        caller = finetuned_model._llm_call
+    else:
+        caller = make_llm_caller(model_name_or_path)
+
+    return caller, finetuned_model, model_source
+
+
+def _build_extractor(
+    phase: str,
+    caller: Any,
+    use_fixed_prompt: bool,
+    include_hints: bool,
+    few_shot: bool,
+) -> Any:
+    if phase == "entity":
+        if use_fixed_prompt:
+            return EntityExtractor(llm_caller_func=caller, system_prompt=FINETUNED_ENTITIES_SYSTEM_PROMPT)
+        return EntityExtractor(llm_caller_func=caller, include_hints=include_hints, few_shot=few_shot)
+    elif phase == "event":
+        if use_fixed_prompt:
+            return EventExtractor(llm_caller_func=caller, system_prompt=FINETUNED_EVENTS_SYSTEM_PROMPT)
+        return EventExtractor(llm_caller_func=caller, include_hints=include_hints, few_shot=few_shot)
+    elif phase == "argument":
+        if use_fixed_prompt:
+            return ArgumentAssigner(llm_caller_func=caller, system_prompt=FINETUNED_ARGUMENTS_SYSTEM_PROMPT)
+        return ArgumentAssigner(llm_caller_func=caller, include_hints=include_hints, few_shot=few_shot)
+    elif phase == "full":
+        if use_fixed_prompt:
+            return FullExtractor(llm_caller_func=caller, system_prompt=FINETUNED_FULL_SYSTEM_PROMPT)
+        return FullExtractor(llm_caller_func=caller, include_hints=include_hints, few_shot=few_shot)
+    raise ValueError(f"Unknown phase for extractor: {phase}")
+
+
+def _build_evaluator(phase: str, extractor_or_assigner: Any) -> Any:
+    if phase == "entity":
+        return EntityEvaluator(extractor=extractor_or_assigner)
+    elif phase == "event":
+        return EventEvaluator(extractor=extractor_or_assigner)
+    elif phase == "argument":
+        return ArgumentEvaluator(assigner=extractor_or_assigner)
+    elif phase == "pipeline":
+        return PipelineEvaluator(extractor=extractor_or_assigner)
+    elif phase == "full":
+        return FullEvaluator(extractor=extractor_or_assigner)
+    raise ValueError(f"Unknown phase for evaluator: {phase}")
+
+
+def _extract_pipeline_subphase(
+    subphase: str,
+    model_name_or_path: str,
+    records: List[Any],
+    base_url: Optional[str],
+    api_key: Optional[str],
+    max_seq_length: int,
+    use_fixed_prompt: bool,
+    include_hints: bool,
+    few_shot: bool,
+    n_jobs: int,
+) -> List[Any]:
+    caller, ft_model, _ = _create_caller(
+        model_name_or_path, base_url=base_url, api_key=api_key, max_seq_length=max_seq_length
+    )
+    try:
+        extractor = _build_extractor(subphase, caller, use_fixed_prompt, include_hints, few_shot)
+        sentences = [r.sentence for r in records]
+        effective_n_jobs = 1 if ft_model is not None else n_jobs
+        if effective_n_jobs > 1:
+            return extractor.extract_batch(sentences, max_workers=effective_n_jobs)
+        else:
+            from tqdm import tqdm
+            preds = []
+            for s in tqdm(sentences, desc=f"Pipeline: extracting {subphase}s"):
+                preds.append(extractor.extract(s))
+            return preds
+    finally:
+        if ft_model is not None:
+            ft_model.unload()
+
+
 def run_evaluation(
     eval_model: str,
     sample: Union[int, float] = 1.0,
@@ -176,15 +296,15 @@ def run_evaluation(
 ) -> List[Dict[str, Any]]:
     """
     Runs entity, event, argument, pipeline (entity -> event -> argument) and
-    full (single-call) evaluation on the test split for the given model, then
+    full (single-call) evaluation on the test split for the given model/preset, then
     appends one CSV row per phase to `csv_path` and dumps raw predictions for
     each phase to a JSONL file under `output_dir`.
 
-    `eval_model` is loaded from disk if it's an existing path (a local finetuned
-    checkpoint); otherwise it's treated as a model name to call over the network --
-    via `base_url` if given (any OpenAI-compatible endpoint, e.g. a local vLLM server
-    or LM Studio), or OpenRouter otherwise. This is independent of `prompt`, which
-    picks the system prompt preset from `PROMPT_PRESETS` (see module docstring).
+    `eval_model` can be:
+      - A preset name defined in `MODEL_PRESETS` (e.g. "finetuned"), which automatically
+        maps to task-specific checkpoints (entity, event, argument, full).
+      - An existing local checkpoint path.
+      - A model identifier to call over network via `base_url` (vLLM) or OpenRouter.
 
     `phases`: subset of {"entity", "event", "argument", "pipeline", "full"} to run.
     Defaults to all five when omitted/empty.
@@ -194,10 +314,18 @@ def run_evaluation(
     preset = PROMPT_PRESETS[prompt]
     use_fixed_prompt, include_hints, few_shot = preset["fixed"], preset["include_hints"], preset["few_shot"]
 
+    is_preset = eval_model in MODEL_PRESETS
+    preset_mapping = MODEL_PRESETS[eval_model] if is_preset else None
+
     is_served = base_url is not None
-    is_local = (not is_served) and os.path.exists(eval_model)
-    model_source = "vllm" if is_served else ("local_checkpoint" if is_local else "openrouter")
-    logger.info(f"=== Starting evaluation for model: {eval_model} ({model_source}), prompt: {prompt} ===")
+    if is_preset:
+        model_source = "vllm" if is_served else "local_checkpoint"
+        logger.info(f"=== Starting evaluation for preset: {eval_model} ({model_source}), prompt: {prompt} ===")
+        logger.info(f"Preset checkpoint mapping: {preset_mapping}")
+    else:
+        is_local = (not is_served) and os.path.exists(_resolve_checkpoint_path(eval_model))
+        model_source = "vllm" if is_served else ("local_checkpoint" if is_local else "openrouter")
+        logger.info(f"=== Starting evaluation for model: {eval_model} ({model_source}), prompt: {prompt} ===")
 
     dataset = load_base_dataset("test")
     n_records = len(dataset.items)
@@ -210,93 +338,105 @@ def run_evaluation(
     base_model_slug = _slugify(os.path.basename(eval_model.rstrip("/\\")) or eval_model)
     model_slug = f"{base_model_slug}__{_slugify(prompt)}"
 
-    # Caller selection (where the model lives) and prompt selection (fixed finetuned
-    # vs. prompt-engineered) are independent axes -- build the caller first, then build
-    # extractors the same way for every caller based on `use_fixed_prompt`.
-    finetuned_model = None
-    if is_served:
-        caller = make_llm_caller(eval_model, base_url=base_url, api_key=api_key)
-    elif is_local:
-        if n_jobs != 1:
-            logger.warning("Local checkpoint inference is not thread-safe; forcing n_jobs=1.")
-        n_jobs = 1
-
-        from apps.trainers.inference_models import FinetunedModel
-        finetuned_model = FinetunedModel(eval_model, max_seq_length=max_seq_length)
-        caller = finetuned_model._llm_call
-    else:
-        caller = make_llm_caller(eval_model)
-
-    if use_fixed_prompt:
-        entity_extractor = EntityExtractor(llm_caller_func=caller, system_prompt=FINETUNED_ENTITIES_SYSTEM_PROMPT)
-        event_extractor = EventExtractor(llm_caller_func=caller, system_prompt=FINETUNED_EVENTS_SYSTEM_PROMPT)
-        argument_assigner = ArgumentAssigner(llm_caller_func=caller, system_prompt=FINETUNED_ARGUMENTS_SYSTEM_PROMPT)
-        full_extractor = FullExtractor(llm_caller_func=caller, system_prompt=FINETUNED_FULL_SYSTEM_PROMPT)
-    else:
-        entity_extractor = EntityExtractor(llm_caller_func=caller, include_hints=include_hints, few_shot=few_shot)
-        event_extractor = EventExtractor(llm_caller_func=caller, include_hints=include_hints, few_shot=few_shot)
-        argument_assigner = ArgumentAssigner(llm_caller_func=caller, include_hints=include_hints, few_shot=few_shot)
-        full_extractor = FullExtractor(llm_caller_func=caller, include_hints=include_hints, few_shot=few_shot)
-
-    pipeline_extractor = PipelineExtractor(
-        llm_caller_func=caller,
-        entity_extractor=entity_extractor,
-        event_extractor=event_extractor,
-        argument_assigner=argument_assigner,
-    )
-
-    all_phases = [
-        ("entity", EntityEvaluator(extractor=entity_extractor)),
-        ("event", EventEvaluator(extractor=event_extractor)),
-        ("argument", ArgumentEvaluator(assigner=argument_assigner)),
-        ("pipeline", PipelineEvaluator(extractor=pipeline_extractor)),
-        ("full", FullEvaluator(extractor=full_extractor)),
-    ]
-    selected_phases = set(phases) if phases else {name for name, _ in all_phases}
-    unknown_phases = selected_phases - {name for name, _ in all_phases}
+    all_phase_names = ["entity", "event", "argument", "pipeline", "full"]
+    selected_phases = set(phases) if phases else set(all_phase_names)
+    unknown_phases = selected_phases - set(all_phase_names)
     if unknown_phases:
         raise ValueError(f"Unknown eval phase(s): {sorted(unknown_phases)}")
-    phases_to_run = [(name, ev) for name, ev in all_phases if name in selected_phases]
-    logger.info(f"Phases to run: {[name for name, _ in phases_to_run]}")
+    phases_to_run = [name for name in all_phase_names if name in selected_phases]
+    logger.info(f"Phases to run: {phases_to_run}")
 
     results = []
     entity_predictions = None
     event_predictions = None
-    try:
-        for phase, evaluator in phases_to_run:
-            logger.info(f"--- Running eval phase: {phase} ---")
+
+    if is_preset:
+        for phase in phases_to_run:
+            logger.info(f"--- Running eval phase: {phase} (Preset: {eval_model}) ---")
             start = time.time()
+            evaluator = None
+            phase_source = model_source
 
-            if phase == "pipeline" and (entity_predictions is None or event_predictions is None):
+            if phase == "pipeline":
                 current_sentences = [record.sentence for record in dataset.items[:n_samples]]
-                entity_predictions, event_predictions = _try_reuse_entity_event_predictions(
-                    output_dir, model_slug, current_sentences
-                )
+                if entity_predictions is None or event_predictions is None:
+                    cached_ent, cached_ev = _try_reuse_entity_event_predictions(
+                        output_dir, model_slug, current_sentences
+                    )
+                    if entity_predictions is None:
+                        entity_predictions = cached_ent
+                    if event_predictions is None:
+                        event_predictions = cached_ev
 
-            if phase == "pipeline" and entity_predictions is not None and event_predictions is not None:
-                precision, recall, f1 = evaluator.evaluate(
-                    dataset,
-                    sample=sample,
-                    n_jobs=n_jobs,
-                    precomputed_entities=entity_predictions,
-                    precomputed_events=event_predictions,
+                if entity_predictions is None:
+                    ent_target = preset_mapping["entity"]
+                    logger.info(f"Pipeline requires entity extraction: using preset entity checkpoint '{ent_target}'...")
+                    entity_predictions = _extract_pipeline_subphase(
+                        "entity", ent_target, dataset.items[:n_samples],
+                        base_url, api_key, max_seq_length, use_fixed_prompt, include_hints, few_shot, n_jobs
+                    )
+                    ent_cache_file = os.path.join(output_dir, f"{model_slug}__entity__{run_timestamp}.jsonl")
+                    _dump_rows(current_sentences, entity_predictions, [r.entities for r in dataset.items[:n_samples]], ent_cache_file)
+
+                if event_predictions is None:
+                    ev_target = preset_mapping["event"]
+                    logger.info(f"Pipeline requires event extraction: using preset event checkpoint '{ev_target}'...")
+                    event_predictions = _extract_pipeline_subphase(
+                        "event", ev_target, dataset.items[:n_samples],
+                        base_url, api_key, max_seq_length, use_fixed_prompt, include_hints, few_shot, n_jobs
+                    )
+                    ev_cache_file = os.path.join(output_dir, f"{model_slug}__event__{run_timestamp}.jsonl")
+                    _dump_rows(current_sentences, event_predictions, [r.events for r in dataset.items[:n_samples]], ev_cache_file)
+
+                arg_target = preset_mapping["argument"]
+                logger.info(f"Pipeline running argument assignment with preset checkpoint: '{arg_target}'...")
+                arg_caller, arg_ft_model, phase_source = _create_caller(
+                    arg_target, base_url=base_url, api_key=api_key, max_seq_length=max_seq_length
                 )
+                try:
+                    arg_assigner = _build_extractor("argument", arg_caller, use_fixed_prompt, include_hints, few_shot)
+                    pipeline_extractor = PipelineExtractor(argument_assigner=arg_assigner)
+                    pipeline_extractor.argument_assigner = arg_assigner
+                    evaluator = PipelineEvaluator(extractor=pipeline_extractor)
+                    effective_n_jobs = 1 if arg_ft_model is not None else n_jobs
+                    precision, recall, f1 = evaluator.evaluate(
+                        dataset,
+                        sample=sample,
+                        n_jobs=effective_n_jobs,
+                        precomputed_entities=entity_predictions,
+                        precomputed_events=event_predictions,
+                    )
+                finally:
+                    if arg_ft_model is not None:
+                        arg_ft_model.unload()
+
             else:
-                precision, recall, f1 = evaluator.evaluate(dataset, sample=sample, n_jobs=n_jobs)
+                task_target = preset_mapping[phase]
+                logger.info(f"Phase '{phase}' running with preset checkpoint: '{task_target}'...")
+                phase_caller, phase_ft_model, phase_source = _create_caller(
+                    task_target, base_url=base_url, api_key=api_key, max_seq_length=max_seq_length
+                )
+                try:
+                    extractor = _build_extractor(phase, phase_caller, use_fixed_prompt, include_hints, few_shot)
+                    evaluator = _build_evaluator(phase, extractor)
+                    effective_n_jobs = 1 if phase_ft_model is not None else n_jobs
+                    precision, recall, f1 = evaluator.evaluate(dataset, sample=sample, n_jobs=effective_n_jobs)
+                    if phase == "entity":
+                        entity_predictions = evaluator.last_predictions
+                    elif phase == "event":
+                        event_predictions = evaluator.last_predictions
+                finally:
+                    if phase_ft_model is not None:
+                        phase_ft_model.unload()
+
             duration = time.time() - start
-
-            if phase == "entity":
-                entity_predictions = evaluator.last_predictions
-            elif phase == "event":
-                event_predictions = evaluator.last_predictions
-
             output_file = os.path.join(output_dir, f"{model_slug}__{phase}__{run_timestamp}.jsonl")
             _dump_predictions(evaluator, output_file)
 
             row = {
                 "timestamp": datetime.now(timezone.utc).isoformat(),
                 "model": eval_model,
-                "model_source": model_source,
+                "model_source": phase_source,
                 "phase": phase,
                 "sample_rate": sample,
                 "n_samples": n_samples,
@@ -314,9 +454,94 @@ def run_evaluation(
                 f"Precision: {precision:.4f}, Recall: {recall:.4f}, F1: {f1:.4f} | "
                 f"Predictions saved to {output_file}"
             )
-    finally:
-        if finetuned_model is not None:
-            finetuned_model.unload()
+
+    else:
+        # Non-preset flow: single model evaluated across all selected phases
+        caller, finetuned_model, model_source = _create_caller(
+            eval_model, base_url=base_url, api_key=api_key, max_seq_length=max_seq_length
+        )
+        try:
+            if finetuned_model is not None and n_jobs != 1:
+                logger.warning("Local checkpoint inference is not thread-safe; forcing n_jobs=1.")
+                n_jobs = 1
+
+            entity_extractor = _build_extractor("entity", caller, use_fixed_prompt, include_hints, few_shot)
+            event_extractor = _build_extractor("event", caller, use_fixed_prompt, include_hints, few_shot)
+            argument_assigner = _build_extractor("argument", caller, use_fixed_prompt, include_hints, few_shot)
+            full_extractor = _build_extractor("full", caller, use_fixed_prompt, include_hints, few_shot)
+            pipeline_extractor = PipelineExtractor(
+                llm_caller_func=caller,
+                entity_extractor=entity_extractor,
+                event_extractor=event_extractor,
+                argument_assigner=argument_assigner,
+            )
+            pipeline_extractor.entity_extractor = entity_extractor
+            pipeline_extractor.event_extractor = event_extractor
+            pipeline_extractor.argument_assigner = argument_assigner
+
+            all_evaluators = {
+                "entity": EntityEvaluator(extractor=entity_extractor),
+                "event": EventEvaluator(extractor=event_extractor),
+                "argument": ArgumentEvaluator(assigner=argument_assigner),
+                "pipeline": PipelineEvaluator(extractor=pipeline_extractor),
+                "full": FullEvaluator(extractor=full_extractor),
+            }
+
+            for phase in phases_to_run:
+                evaluator = all_evaluators[phase]
+                logger.info(f"--- Running eval phase: {phase} ---")
+                start = time.time()
+
+                if phase == "pipeline" and (entity_predictions is None or event_predictions is None):
+                    current_sentences = [record.sentence for record in dataset.items[:n_samples]]
+                    entity_predictions, event_predictions = _try_reuse_entity_event_predictions(
+                        output_dir, model_slug, current_sentences
+                    )
+
+                if phase == "pipeline" and entity_predictions is not None and event_predictions is not None:
+                    precision, recall, f1 = evaluator.evaluate(
+                        dataset,
+                        sample=sample,
+                        n_jobs=n_jobs,
+                        precomputed_entities=entity_predictions,
+                        precomputed_events=event_predictions,
+                    )
+                else:
+                    precision, recall, f1 = evaluator.evaluate(dataset, sample=sample, n_jobs=n_jobs)
+                duration = time.time() - start
+
+                if phase == "entity":
+                    entity_predictions = evaluator.last_predictions
+                elif phase == "event":
+                    event_predictions = evaluator.last_predictions
+
+                output_file = os.path.join(output_dir, f"{model_slug}__{phase}__{run_timestamp}.jsonl")
+                _dump_predictions(evaluator, output_file)
+
+                row = {
+                    "timestamp": datetime.now(timezone.utc).isoformat(),
+                    "model": eval_model,
+                    "model_source": model_source,
+                    "phase": phase,
+                    "sample_rate": sample,
+                    "n_samples": n_samples,
+                    "options": prompt,
+                    "duration_seconds": round(duration, 2),
+                    "precision": round(precision, 4),
+                    "recall": round(recall, 4),
+                    "f1": round(f1, 4),
+                    "output_file": output_file,
+                }
+                _append_csv_row(csv_path, row)
+                results.append(row)
+                logger.info(
+                    f"Phase '{phase}' done in {duration:.2f}s | "
+                    f"Precision: {precision:.4f}, Recall: {recall:.4f}, F1: {f1:.4f} | "
+                    f"Predictions saved to {output_file}"
+                )
+        finally:
+            if finetuned_model is not None:
+                finetuned_model.unload()
 
     logger.info(f"=== Evaluation complete. Results appended to {csv_path} ===")
     return results

@@ -135,30 +135,59 @@ Key flags: `--model_name` (base model, default `Qwen/Qwen3-4B-Instruct-2507`), `
 
 ### 5. Evaluation
 Evaluate a model on the test split. `--model` can be:
+- a **model preset** (e.g. `finetuned`), which automatically maps each evaluation phase to its corresponding task-specific checkpoint,
 - an **OpenRouter** model id (e.g. `google/gemma-4-31b-it`),
 - a **local checkpoint path** (loaded directly with `transformers`/`unsloth`), or
 - a model name served behind `--base_url` (any OpenAI-compatible endpoint — vLLM, LM Studio, etc.).
 
 ```bash
+# Evaluate finetuned models across all tasks using the 'finetuned' preset (auto-maps checkpoints to tasks)
+python main.py evaluate --model finetuned
+
+# Evaluate a specific subset of phases with the preset
+python main.py evaluate --model finetuned --phases entity event
+
+# Evaluate end-to-end pipeline extraction
+python main.py evaluate --model finetuned --phases pipeline
+
 # OpenRouter model, prompt-engineered (schema + type hints + few-shot)
 python main.py evaluate --model google/gemma-4-31b-it --sample 1.0 --prompt instruction,type_hints,few_shot
 
-# Local finetuned checkpoint, fixed finetuned system prompt
+# Specific local finetuned checkpoint
 python main.py evaluate --model checkpoints/full/final --prompt finetuned
 
 # Model served over HTTP (e.g. vLLM), prompt-engineered
 python main.py evaluate --model qwen3-4b --base_url http://localhost:8000/v1 --concurrency 10 --prompt instruction,type_hints
 ```
 
+#### Model Presets (`MODEL_PRESETS`)
+When `--model` is set to a preset like `finetuned` (configured in `apps/constants.py`), the evaluator automatically routes each task to its specialized checkpoint:
+
+| Phase / Task | Checkpoint | Description |
+| :--- | :--- | :--- |
+| `entity` | `checkpoints/entity/final` | Entity extraction reasoning model |
+| `event` | `checkpoints/event/final` | Event trigger extraction reasoning model |
+| `argument` | `checkpoints/argument/final` | Argument role assignment reasoning model |
+| `pipeline` | `entity` + `event` + `argument` | End-to-end pipeline using the 3 specialized models above |
+| `full` | `checkpoints/full/final` | Single-stage unified extraction reasoning model |
+
+> **Memory Efficiency:** When running multiple phases under a preset, checkpoints are loaded sequentially per task and unloaded immediately (`model.unload()`) when the phase finishes. This guarantees that at most one model resides in RAM/VRAM at any given time, preventing out-of-memory errors on Apple Silicon (MPS) or GPUs. In addition, `pipeline` automatically reuses precomputed predictions if `entity` and `event` phases were evaluated earlier in the same run.
+
+#### System Prompt Presets (`--prompt`)
 `--prompt` selects which system prompt to use, independent of where the model is loaded from:
 | Preset | System prompt |
 | :--- | :--- |
-| `finetuned` | Fixed `FINETUNED_*_SYSTEM_PROMPT` (for checkpoints trained via `train`) |
+| `finetuned` | Fixed `FINETUNED_*_SYSTEM_PROMPT` (default for fine-tuned checkpoints) |
 | `instruction` | `*_SYSTEM_PROMPT_TEMPLATE` with schema only, no type hints |
 | `instruction,type_hints` | Schema + per-type descriptions/examples |
 | `instruction,type_hints,few_shot` | Schema + type hints + few-shot examples |
 
-Other flags: `--sample` (fraction of the test set, default `1.0`), `--concurrency`, `--phases` (subset of `entity event argument pipeline full`, default all five), `--csv_output` (results CSV, default `eval_results.csv`), `--api_key` (for `--base_url`, if required).
+#### Other Flags
+* `--sample`: fraction of the test set to evaluate (default `1.0`), or integer count of samples.
+* `--phases`: subset of `entity event argument pipeline full` (default: all five).
+* `--concurrency`: parallel workers for API / served queries (default: `5`). Local checkpoints run sequentially for thread-safety.
+* `--csv_output`: results CSV path (default: `eval_results.csv`).
+* `--base_url` & `--api_key`: endpoint configuration for served models (e.g., vLLM).
 
 Each run appends one row per phase to the results CSV and dumps raw predictions to `eval_outputs/{model}__{prompt}__{phase}__{timestamp}.jsonl`.
 

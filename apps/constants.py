@@ -1120,6 +1120,15 @@ FINETUNED_ARGUMENTS_SYSTEM_PROMPT = "Gán nhãn loại tham số sự kiện cho
 
 FINETUNED_FULL_SYSTEM_PROMPT = "Trích xuất thực thể kèm span text, trigger sự kiện và tham số tương ứng của từng thực thể từ câu tiếng Việt đã cho. Hãy suy nghĩ theo từng bước."
 
+MODEL_PRESETS = {
+    "finetuned": {
+        "entity": "checkpoints/entity/final",
+        "event": "checkpoints/event/final",
+        "argument": "checkpoints/argument/final",
+        "full": "checkpoints/full/final",
+    },
+}
+
 ENTITIES_FEW_SHOT_EXAMPLES = """
 --- Ví dụ 1 ---
 Câu: "Khi đi vào xã Cổ Đông , do trời mưa Hoài bị ngã nên cởi giày và áo bẩn vứt đi ; chân chảy máu vì giẫm vào thuỷ tinh ."

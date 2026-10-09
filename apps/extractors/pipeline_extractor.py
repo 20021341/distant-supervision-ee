@@ -24,15 +24,24 @@ class PipelineExtractor:
     def __init__(self, llm_caller_func=None, entity_extractor=None, event_extractor=None, argument_assigner=None, **kwargs):
         if llm_caller_func is not None:
             self.llm_caller_func = llm_caller_func
+        if entity_extractor is not None:
+            self.entity_extractor = entity_extractor
+        if event_extractor is not None:
+            self.event_extractor = event_extractor
+        if argument_assigner is not None:
+            self.argument_assigner = argument_assigner
         if getattr(self, "_initialized", False):
             return
 
         if not hasattr(self, "llm_caller_func"):
             self.llm_caller_func = call_llm_json
 
-        self.entity_extractor = entity_extractor or EntityExtractor(llm_caller_func=self.llm_caller_func, **kwargs)
-        self.event_extractor = event_extractor or EventExtractor(llm_caller_func=self.llm_caller_func, **kwargs)
-        self.argument_assigner = argument_assigner or ArgumentAssigner(llm_caller_func=self.llm_caller_func, **kwargs)
+        if not hasattr(self, "entity_extractor"):
+            self.entity_extractor = entity_extractor or EntityExtractor(llm_caller_func=self.llm_caller_func, **kwargs)
+        if not hasattr(self, "event_extractor"):
+            self.event_extractor = event_extractor or EventExtractor(llm_caller_func=self.llm_caller_func, **kwargs)
+        if not hasattr(self, "argument_assigner"):
+            self.argument_assigner = argument_assigner or ArgumentAssigner(llm_caller_func=self.llm_caller_func, **kwargs)
         self._initialized = True
 
     @parallel_batch(max_workers=5)
