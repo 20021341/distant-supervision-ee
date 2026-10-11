@@ -1120,6 +1120,21 @@ FINETUNED_ARGUMENTS_SYSTEM_PROMPT = "Gán nhãn loại tham số sự kiện cho
 
 FINETUNED_FULL_SYSTEM_PROMPT = "Trích xuất thực thể kèm span text, trigger sự kiện và tham số tương ứng của từng thực thể từ câu tiếng Việt đã cho. Hãy suy nghĩ theo từng bước."
 
+SHORT_ENTITIES_SYSTEM_PROMPT = "Trích xuất các đề cập thực thể từ câu tiếng Việt đã cho dưới dạng JSON."
+
+SHORT_EVENTS_SYSTEM_PROMPT = "Trích xuất các trigger (từ hoặc cụm từ biểu thị sự kiện) từ câu tiếng Việt đã cho dưới dạng JSON."
+
+SHORT_ARGUMENTS_SYSTEM_PROMPT = "Gán nhãn loại tham số sự kiện cho các thực thể phù hợp từ danh sách thực thể ứng viên đã cho dưới dạng JSON."
+
+SHORT_FULL_SYSTEM_PROMPT = "Trích xuất thực thể kèm span text, trigger sự kiện và tham số tương ứng của từng thực thể từ câu tiếng Việt đã cho dưới dạng JSON."
+
+SHORT_SYSTEM_PROMPTS = {
+    "entity": SHORT_ENTITIES_SYSTEM_PROMPT,
+    "event": SHORT_EVENTS_SYSTEM_PROMPT,
+    "argument": SHORT_ARGUMENTS_SYSTEM_PROMPT,
+    "full": SHORT_FULL_SYSTEM_PROMPT,
+}
+
 MODEL_PRESETS = {
     "finetuned": {
         "entity": "checkpoints/entity/final",

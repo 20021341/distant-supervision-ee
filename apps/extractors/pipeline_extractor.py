@@ -63,8 +63,8 @@ class PipelineExtractor:
                 except Exception as e:
                     logger.error(f"Error assigning arguments for event {event}: {e}")
             
-            logger.info(f"Pipeline Entities: {entities}")
-            logger.info(f"Pipeline Events: {assigned_events}")
+            logger.debug("Pipeline Entities: %s", entities)
+            logger.debug("Pipeline Events: %s", assigned_events)
             return PredictedItem(entities=entities, events=assigned_events)
         except Exception as e:
             logger.error(e)

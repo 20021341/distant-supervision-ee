@@ -4,7 +4,7 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-def retry(max_attempts: int = 3, delay: float = 1.0, backoff: float = 2.0):
+def retry(max_attempts: int = 3, delay: float = 1.0, backoff: float = 2.0, exclude_exceptions: tuple = ()):
     """
     A decorator to retry a function call if it raises an Exception.
     
@@ -12,6 +12,7 @@ def retry(max_attempts: int = 3, delay: float = 1.0, backoff: float = 2.0):
         max_attempts (int): Maximum number of attempts before raising the exception.
         delay (float): Initial delay between retries in seconds.
         backoff (float): Multiplier applied to delay after each failure.
+        exclude_exceptions (tuple): Tuple of Exception classes to abort on immediately without retrying.
     """
     def decorator(func):
         @functools.wraps(func)
@@ -22,6 +23,11 @@ def retry(max_attempts: int = 3, delay: float = 1.0, backoff: float = 2.0):
                 try:
                     return func(*args, **kwargs)
                 except Exception as e:
+                    if exclude_exceptions and isinstance(e, exclude_exceptions):
+                        logger.warning(
+                            f"[Retry] Immediate abort for '{func.__module__}.{func.__name__}' due to non-retryable exception: {type(e).__name__} ({e})"
+                        )
+                        raise e
                     attempts += 1
                     logger.warning(
                         f"[Retry] Attempt {attempts}/{max_attempts} for '{func.__module__}.{func.__name__}' "

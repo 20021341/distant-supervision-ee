@@ -129,9 +129,18 @@ python main.py build --phase full --retry_errors --concurrency 4
 ### 4. Model Training
 Run fine-tuning on the generated datasets:
 ```bash
-python main.py train --phase full --epochs 2 --finetune_type lora
+# Fine-tune reasoning model (chain of thought inside <think></think>)
+python main.py train --phase full --model_type reasoning --epochs 2 --finetune_type lora
+
+# Fine-tune direct JSON model (short system prompt, user prompt = sentence only, JSON output only without reasoning)
+python main.py train --phase full --model_type json --epochs 2 --finetune_type lora
 ```
-Key flags: `--model_name` (base model, default `Qwen/Qwen3-4B-Instruct-2507`), `--epochs`, `--save_steps`, `--max_seq_length`, `--finetune_type` (`lora` or `full`), `--batch_size`, `--grad_accum_steps`, `--keep_checkpoints`, and `--continue <run_name>` to resume an interrupted run.
+Key flags:
+* `--model_name`: base model (default `Qwen/Qwen3-4B-Instruct-2507`).
+* `--model_type`: format style (`instruction` keeping standard output as-is, `reasoning` wrapping chain of thought within `<think></think>`, or `json`/`direct`/`no_reasoning` using short system prompt, sentence-only user prompt, and direct JSON output without reasoning; default `instruction`).
+* `--system_prompt`: optional custom system prompt string to override the default system prompt.
+* `--epochs`, `--save_steps`, `--max_seq_length`, `--finetune_type` (`lora` or `full`), `--batch_size`, `--grad_accum_steps`, `--keep_checkpoints`, and `--continue <run_name>` to resume an interrupted run.
+
 
 ### 5. Evaluation
 Evaluate a model on the test split. `--model` can be:
@@ -177,15 +186,19 @@ When `--model` is set to a preset like `finetuned` (configured in `apps/constant
 `--prompt` selects which system prompt to use, independent of where the model is loaded from:
 | Preset | System prompt |
 | :--- | :--- |
-| `finetuned` | Fixed `FINETUNED_*_SYSTEM_PROMPT` (default for fine-tuned checkpoints) |
+| `finetuned` | Fixed `FINETUNED_*_SYSTEM_PROMPT` (default for fine-tuned reasoning checkpoints) |
+| `short` / `json` | Fixed `SHORT_*_SYSTEM_PROMPT` (concise prompt for models fine-tuned without reasoning) |
 | `instruction` | `*_SYSTEM_PROMPT_TEMPLATE` with schema only, no type hints |
 | `instruction,type_hints` | Schema + per-type descriptions/examples |
 | `instruction,type_hints,few_shot` | Schema + type hints + few-shot examples |
+
 
 #### Other Flags
 * `--sample`: fraction of the test set to evaluate (default `1.0`), or integer count of samples.
 * `--phases`: subset of `entity event argument pipeline full` (default: all five).
 * `--concurrency`: parallel workers for API / served queries (default: `5`). Local checkpoints run sequentially for thread-safety.
+* `--timeout`: per-request timeout in seconds for API / served models (default: `60.0`). If a request exceeds this duration (e.g. infinite token repetition loops), it is immediately aborted and marked failed without retrying.
+* `--max_seq_length` (or `--max_len`): maximum output token generation length / context window for evaluation (default: `2048`).
 * `--csv_output`: results CSV path (default: `eval_results.csv`).
 * `--base_url` & `--api_key`: endpoint configuration for served models (e.g., vLLM).
 

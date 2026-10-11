@@ -15,7 +15,8 @@ from apps.constants import (
     FINETUNED_ENTITIES_SYSTEM_PROMPT,
     FINETUNED_EVENTS_SYSTEM_PROMPT,
     FINETUNED_ARGUMENTS_SYSTEM_PROMPT,
-    FINETUNED_FULL_SYSTEM_PROMPT
+    FINETUNED_FULL_SYSTEM_PROMPT,
+    SHORT_ARGUMENTS_SYSTEM_PROMPT
 )
 
 from apps.evaluators.entity_evaluator import EntityEvaluator
@@ -26,7 +27,8 @@ from apps.evaluators.full_evaluator import FullEvaluator
 class FinetunedModel:
     def __init__(self, checkpoint: str, max_seq_length: int = 2048, **kwargs):
         self.checkpoint = checkpoint
-        print(f"Loading FinetunedModel checkpoint: {checkpoint}...")
+        self.max_seq_length = max_seq_length
+        print(f"Loading FinetunedModel checkpoint: {checkpoint} (max_seq_length={max_seq_length})...")
         
         import torch
         import unsloth
@@ -82,14 +84,15 @@ class FinetunedModel:
         import unsloth
         is_mlx = getattr(unsloth, "_IS_MLX", False)
         
+        gen_tokens = kwargs.get("max_tokens", kwargs.get("max_new_tokens", self.max_seq_length))
         if is_mlx:
             from mlx_lm import generate
-            out_str = generate(self.model, self.tokenizer, prompt, verbose=False, max_tokens=2048)
+            out_str = generate(self.model, self.tokenizer, prompt, verbose=False, max_tokens=gen_tokens)
         else:
             # PyTorch / CUDA / MPS / CPU generation
             inputs = self.tokenizer([prompt], return_tensors = "pt")
             inputs = {k: v.to(self.model.device) for k, v in inputs.items()}
-            outputs = self.model.generate(**inputs, max_new_tokens = 2048, use_cache = True)
+            outputs = self.model.generate(**inputs, max_new_tokens = gen_tokens, use_cache = True)
             prompt_len = inputs["input_ids"].shape[1]
             out_str = self.tokenizer.decode(outputs[0][prompt_len:], skip_special_tokens = True)
             
@@ -122,9 +125,10 @@ class FinetunedModel:
 
 
 class EntityExtractorModel(FinetunedModel):
-    def __init__(self, checkpoint: str, max_seq_length: int = 2048):
+    def __init__(self, checkpoint: str, max_seq_length: int = 2048, system_prompt: Optional[str] = None):
         super().__init__(checkpoint, max_seq_length)
-        self.extractor = EntityExtractor(llm_caller_func=self._llm_call, system_prompt=FINETUNED_ENTITIES_SYSTEM_PROMPT)
+        sys_prompt = system_prompt or FINETUNED_ENTITIES_SYSTEM_PROMPT
+        self.extractor = EntityExtractor(llm_caller_func=self._llm_call, system_prompt=sys_prompt)
         self.evaluator = EntityEvaluator(extractor=self.extractor)
 
     def infer(self, sentence: str) -> List[ExtractedEntity]:
@@ -135,9 +139,10 @@ class EntityExtractorModel(FinetunedModel):
 
 
 class EventExtractorModel(FinetunedModel):
-    def __init__(self, checkpoint: str, max_seq_length: int = 2048):
+    def __init__(self, checkpoint: str, max_seq_length: int = 2048, system_prompt: Optional[str] = None):
         super().__init__(checkpoint, max_seq_length)
-        self.extractor = EventExtractor(llm_caller_func=self._llm_call, system_prompt=FINETUNED_EVENTS_SYSTEM_PROMPT)
+        sys_prompt = system_prompt or FINETUNED_EVENTS_SYSTEM_PROMPT
+        self.extractor = EventExtractor(llm_caller_func=self._llm_call, system_prompt=sys_prompt)
         self.evaluator = EventEvaluator(extractor=self.extractor)
 
     def infer(self, sentence: str) -> List[ExtractedEvent]:
@@ -148,9 +153,17 @@ class EventExtractorModel(FinetunedModel):
 
 
 class ArgumentAssignerModel(FinetunedModel):
-    def __init__(self, checkpoint: str, max_seq_length: int = 2048):
+    def __init__(self, checkpoint: str, max_seq_length: int = 2048, system_prompt: Optional[str] = None, include_schema: Optional[bool] = None):
         super().__init__(checkpoint, max_seq_length)
-        self.assigner = ArgumentAssigner(llm_caller_func=self._llm_call, system_prompt=FINETUNED_ARGUMENTS_SYSTEM_PROMPT)
+        sys_prompt = system_prompt or FINETUNED_ARGUMENTS_SYSTEM_PROMPT
+        if include_schema is None:
+            include_schema = False if sys_prompt == SHORT_ARGUMENTS_SYSTEM_PROMPT else True
+        self.assigner = ArgumentAssigner(
+            llm_caller_func=self._llm_call,
+            system_prompt=sys_prompt,
+            include_hints=include_schema,
+            include_schema=include_schema
+        )
         self.evaluator = ArgumentEvaluator(assigner=self.assigner)
 
     def infer(self, sentence: str, event: ExtractedEvent, entities: List[ExtractedEntity]) -> Optional[AssignedEvent]:
@@ -161,9 +174,10 @@ class ArgumentAssignerModel(FinetunedModel):
 
 
 class FullModel(FinetunedModel):
-    def __init__(self, checkpoint: str, max_seq_length: int = 2048):
+    def __init__(self, checkpoint: str, max_seq_length: int = 2048, system_prompt: Optional[str] = None):
         super().__init__(checkpoint, max_seq_length)
-        self.extractor = FullExtractor(llm_caller_func=self._llm_call, system_prompt=FINETUNED_FULL_SYSTEM_PROMPT)
+        sys_prompt = system_prompt or FINETUNED_FULL_SYSTEM_PROMPT
+        self.extractor = FullExtractor(llm_caller_func=self._llm_call, system_prompt=sys_prompt)
         self.evaluator = FullEvaluator(extractor=self.extractor)
 
     def infer(self, sentence: str) -> Optional[PredictedItem]:

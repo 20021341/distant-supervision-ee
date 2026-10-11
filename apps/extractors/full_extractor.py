@@ -60,9 +60,9 @@ class FullExtractor:
                 except Exception:
                     pass
 
-            logger.info(f"Raw Answer: {raw_answer}")
-            logger.info(f"Entities: {entities}")
-            logger.info(f"Events: {events}")
+            logger.debug("Raw Answer: %s", raw_answer)
+            logger.debug("Entities: %s", entities)
+            logger.debug("Events: %s", events)
             return PredictedItem(entities=entities, events=events)
             
         except Exception as e:

@@ -221,14 +221,14 @@ def retry_failed(phase: str, n_jobs: int):
         print(f"[{split}] Retried {len(failed_indices)} records: {len(failed_indices) - still_failed} fixed, {still_failed} still failing. Saved.")
 
 
-def run_eval(eval_model: str, sample: float, n_jobs: int, prompt: str, csv_output: str, eval_phases: list, eval_base_url: str = None, eval_api_key: str = None):
+def run_eval(eval_model: str, sample: float, n_jobs: int, prompt: str, csv_output: str, eval_phases: list, eval_base_url: str = None, eval_api_key: str = None, eval_timeout: float = 60.0, max_seq_length: int = 2048):
     print(f"=== Starting Evaluation for model: {eval_model} ===")
     from apps.constants import MODEL_PRESETS
     if eval_model in MODEL_PRESETS:
         print(f"Using model preset: '{eval_model}' with checkpoint mapping:")
         for task, ckpt in MODEL_PRESETS[eval_model].items():
             print(f"  - {task:10s} -> {ckpt}")
-    print(f"Sample rate: {sample}, n_jobs: {n_jobs}, prompt: {prompt}")
+    print(f"Sample rate: {sample}, n_jobs: {n_jobs}, prompt: {prompt}, timeout: {eval_timeout}s, max_len: {max_seq_length}")
     print(f"Phases: {eval_phases if eval_phases else 'entity, event, argument, pipeline, full (default)'}")
     if eval_base_url:
         print(f"Serving endpoint: {eval_base_url}")
@@ -243,12 +243,17 @@ def run_eval(eval_model: str, sample: float, n_jobs: int, prompt: str, csv_outpu
         phases=eval_phases or None,
         base_url=eval_base_url,
         api_key=eval_api_key,
+        request_timeout=eval_timeout,
+        max_seq_length=max_seq_length,
     )
 
 
-def run_training(phase: str, model_name: str, epochs: int, save_steps: int, max_seq_length: int, finetune_type: str, batch_size: int, grad_accum_steps: int, keep_checkpoints: int, continue_run: str = None):
+def run_training(phase: str, model_name: str, epochs: int, save_steps: int, max_seq_length: int, finetune_type: str, batch_size: int, grad_accum_steps: int, keep_checkpoints: int, continue_run: str = None, model_type: str = "instruction", system_prompt: str = None):
     print(f"=== Starting Training for phase: {phase} ===")
     print(f"Base Model: {model_name}")
+    print(f"Model Type: {model_type}")
+    if system_prompt:
+        print(f"Custom System Prompt: {system_prompt}")
     print(f"Finetune Type: {finetune_type}")
     print(f"Epochs: {epochs}, Save Steps: {save_steps}")
     print(f"Batch Size: {batch_size}, Gradient Accumulation Steps: {grad_accum_steps} (effective batch size: {batch_size * grad_accum_steps})")
@@ -277,7 +282,9 @@ def run_training(phase: str, model_name: str, epochs: int, save_steps: int, max_
         batch_size=batch_size,
         gradient_accumulation_steps=grad_accum_steps,
         keep_checkpoints=keep_checkpoints,
-        continue_run=continue_run
+        continue_run=continue_run,
+        model_type=model_type,
+        system_prompt=system_prompt,
     )
     print(f"Successfully trained and loaded finetuned model: {finetuned_model}")
 
@@ -363,6 +370,21 @@ def main():
              "Lower this for full finetuning, where each checkpoint (model + optimizer state) can be tens of GB."
     )
     train_parser.add_argument(
+        "--model_type",
+        choices=["instruction", "reasoning", "json", "direct", "no_reasoning"],
+        default="instruction",
+        help="Model format style: 'instruction' (keeps standard output text as-is), 'reasoning' "
+             "(wraps chain of thought within <think></think> tags), or 'json'/'direct'/'no_reasoning' "
+             "(short system prompt, user prompt is only sentence, LLM output is only JSON text, no reasoning) "
+             "(default: instruction)"
+    )
+    train_parser.add_argument(
+        "--system_prompt",
+        type=str,
+        default=None,
+        help="Optional custom system prompt to override the default system prompt during training"
+    )
+    train_parser.add_argument(
         "--continue",
         dest="continue_run",
         type=str,
@@ -400,10 +422,11 @@ def main():
     )
     eval_parser.add_argument(
         "--prompt",
-        choices=["finetuned", "instruction", "instruction,type_hints", "instruction,type_hints,few_shot"],
+        choices=["finetuned", "short", "json", "instruction", "instruction,type_hints", "instruction,type_hints,few_shot"],
         default="finetuned",
         help="System prompt preset: 'finetuned' uses the fixed FINETUNED_* system prompt (for "
-             "finetuned checkpoints); the others build *_SYSTEM_PROMPT_TEMPLATE with just the "
+             "finetuned checkpoints); 'short' or 'json' uses SHORT_* system prompt (for models finetuned "
+             "without reasoning); the others build *_SYSTEM_PROMPT_TEMPLATE with just the "
              "entity/event/argument schema ('instruction'), schema + type hints, or schema + type "
              "hints + few-shot examples (default: finetuned)"
     )
@@ -427,6 +450,20 @@ def main():
         default=None,
         help="API key for --base_url, if required (default: dummy value, vLLM does not check it)"
     )
+    eval_parser.add_argument(
+        "--timeout",
+        type=float,
+        default=60.0,
+        help="Request timeout in seconds for each LLM evaluation request. If exceeded, the record is immediately marked as failed without retrying (default: 60.0)"
+    )
+    eval_parser.add_argument(
+        "--max_seq_length",
+        "--max_len",
+        dest="max_seq_length",
+        type=int,
+        default=2048,
+        help="Maximum generation length / context length in tokens for evaluation (default: 2048)"
+    )
     args = parser.parse_args()
 
     if args.command == "build":
@@ -445,7 +482,9 @@ def main():
             batch_size=args.batch_size,
             grad_accum_steps=args.grad_accum_steps,
             keep_checkpoints=args.keep_checkpoints,
-            continue_run=args.continue_run
+            continue_run=args.continue_run,
+            model_type=args.model_type,
+            system_prompt=args.system_prompt,
         )
     elif args.command == "evaluate":
         run_eval(
@@ -457,6 +496,8 @@ def main():
             eval_phases=args.phases,
             eval_base_url=args.base_url,
             eval_api_key=args.api_key,
+            eval_timeout=args.timeout,
+            max_seq_length=args.max_seq_length,
         )
     else:
         parser.print_help()

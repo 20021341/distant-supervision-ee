@@ -22,6 +22,7 @@ from apps.trainers.inference_models import (
     FullModel,
     FinetunedModel
 )
+from apps.constants import SHORT_SYSTEM_PROMPTS
 
 def find_last_checkpoint(run_dir: str) -> tuple[str, int]:
     """Finds the last checkpoint path and its step number in a run directory."""
@@ -207,7 +208,9 @@ class Trainer:
         batch_size: int = 1,
         gradient_accumulation_steps: int = 4,
         keep_checkpoints: int = 2,
-        continue_run: Optional[str] = None
+        continue_run: Optional[str] = None,
+        model_type: Literal["instruction", "reasoning", "json", "direct", "no_reasoning"] = "instruction",
+        system_prompt: Optional[str] = None,
     ) -> Union[EntityExtractorModel, EventExtractorModel, ArgumentAssignerModel, FullModel]:
         # Determine the project root directory
         project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
@@ -239,7 +242,12 @@ class Trainer:
         os.makedirs(output_dir, exist_ok=True)
         os.makedirs(final_model_dir, exist_ok=True)
 
-        formatted_dataset = convert_to_train_dataset(dataset, phase, self.tokenizer)
+        print(f"Model Type: {model_type}")
+        if system_prompt:
+            print(f"Custom System Prompt: {system_prompt}")
+        formatted_dataset = convert_to_train_dataset(
+            dataset, phase, self.tokenizer, model_type=model_type, system_prompt=system_prompt
+        )
         print(f"Successfully processed and formatted {len(formatted_dataset)} samples.")
         
         # Print estimated steps for visibility
@@ -429,21 +437,23 @@ class Trainer:
             pass
 
         print(f"Loading finetuned model checkpoint from {final_model_dir}...")
-        return self.get_inference_model(phase, final_model_dir)
+        infer_sys_prompt = system_prompt or (SHORT_SYSTEM_PROMPTS[phase] if model_type in ("json", "direct", "no_reasoning", "direct_json") else None)
+        return self.get_inference_model(phase, final_model_dir, system_prompt=infer_sys_prompt)
 
     def get_inference_model(
         self,
         phase: Literal["entity", "event", "argument", "full"],
-        checkpoint_dir: str
+        checkpoint_dir: str,
+        system_prompt: Optional[str] = None,
     ) -> Union[EntityExtractorModel, EventExtractorModel, ArgumentAssignerModel, FullModel]:
         if phase == "entity":
-            return EntityExtractorModel(checkpoint_dir, self.max_seq_length)
+            return EntityExtractorModel(checkpoint_dir, self.max_seq_length, system_prompt=system_prompt)
         elif phase == "event":
-            return EventExtractorModel(checkpoint_dir, self.max_seq_length)
+            return EventExtractorModel(checkpoint_dir, self.max_seq_length, system_prompt=system_prompt)
         elif phase == "argument":
-            return ArgumentAssignerModel(checkpoint_dir, self.max_seq_length)
+            return ArgumentAssignerModel(checkpoint_dir, self.max_seq_length, system_prompt=system_prompt)
         elif phase == "full":
-            return FullModel(checkpoint_dir, self.max_seq_length)
+            return FullModel(checkpoint_dir, self.max_seq_length, system_prompt=system_prompt)
         else:
             raise ValueError(f"Invalid phase: {phase}")
 

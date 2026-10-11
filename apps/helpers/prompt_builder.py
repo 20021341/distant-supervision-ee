@@ -50,11 +50,31 @@ def build_arguments_user_prompt(
     sentence: str,
     event: ExtractedEvent,
     entities: List[ExtractedEntity],
-    include_hints: bool = True
+    include_hints: bool = True,
+    include_schema: bool = True
 ) -> str:
     event_type, event_trigger = event.type, event.trigger
-    event_schema = EVENT_ARGUMENTS_SCHEMA.get(event_type.value, None)
+    ev_type_val = event_type.value if hasattr(event_type, 'value') else str(event_type)
+    event_schema = EVENT_ARGUMENTS_SCHEMA.get(ev_type_val, None)
     assert event_schema, f"Missing argument schema for {event_type}"
+
+    valid_entity_types = list(set(chain(*[event_schema['schema'][arg_type] for arg_type in event_schema['schema']])))
+    valid_entities = [
+        entity for entity in entities
+        if (entity.type.value if hasattr(entity.type, 'value') else str(entity.type)) in valid_entity_types
+    ]
+    entities_json = json.dumps([entity.model_dump(mode='json') if hasattr(entity, 'model_dump') else entity for entity in valid_entities], ensure_ascii=False)
+
+    if not include_schema:
+        return """- Văn bản: "{sentence}"
+- Loại sự kiện: "{event_type}"
+- Trigger sự kiện: "{event_trigger}"
+- Danh sách thực thể ứng viên: "{entities}" """.strip().format(
+            sentence=sentence,
+            event_type=ev_type_val,
+            event_trigger=event_trigger,
+            entities=entities_json
+        )
 
     valid_argument_types = event_schema['schema'].keys()
     valid_arguments_hint = ""
@@ -62,10 +82,6 @@ def build_arguments_user_prompt(
         valid_arguments_hint += f"{index}. {argument_type}\n"
         if include_hints:
             valid_arguments_hint += f"{ARGUMENT_TYPES[argument_type]}\n\n---\n\n"
-
-    valid_entity_types = list(set(chain(*[event_schema['schema'][arg_type] for arg_type in event_schema['schema']])))
-    valid_entities = [entity for entity in entities if entity.type.value in valid_entity_types]
-
 
     return """
 - Văn bản: "{sentence}"
@@ -76,11 +92,12 @@ def build_arguments_user_prompt(
 {arguments_hint}
 """.format(
         sentence=sentence,
-        event_type=event_type.value,
+        event_type=ev_type_val,
         event_trigger=event_trigger,
-        entities=json.dumps([entity.model_dump(mode='json') for entity in valid_entities], ensure_ascii=False),
+        entities=entities_json,
         arguments_hint=valid_arguments_hint
     )
+
 
 def build_full_system_prompt(include_hints: bool = True, few_shot: bool = False):
     entity_types_text = ""

@@ -26,10 +26,11 @@ class ArgumentAssigner:
             return
 
         system_prompt = kwargs.get("system_prompt", None)
-        self.include_hints = kwargs.get("include_hints", True)
+        self.include_hints = kwargs.get("include_hints", getattr(self, "include_hints", True))
+        self.include_schema = kwargs.get("include_schema", getattr(self, "include_schema", True))
         if system_prompt is not None:
             self.system_prompt = system_prompt
-        else:
+        elif not hasattr(self, "system_prompt"):
             few_shot = kwargs.get("few_shot", False)
             self.system_prompt = build_arguments_system_prompt(few_shot=few_shot)
 
@@ -46,7 +47,7 @@ class ArgumentAssigner:
     ) -> Optional[AssignedEvent]:
         try:
             user_prompt = build_arguments_user_prompt(
-                sentence, event, entities, include_hints=self.include_hints
+                sentence, event, entities, include_hints=self.include_hints, include_schema=self.include_schema
             )
             raw_answer, result = self.llm_caller_func(
                 system_prompt=self.system_prompt,
@@ -61,8 +62,8 @@ class ArgumentAssigner:
                 except Exception:
                     pass
 
-            logger.info(f"Raw Answer: {raw_answer}")
-            logger.info(f"Arguments: {arguments}")
+            logger.debug("Raw Answer: %s", raw_answer)
+            logger.debug("Arguments: %s", arguments)
             
             return AssignedEvent(
                 type=event.type,

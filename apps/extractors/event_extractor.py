@@ -52,8 +52,8 @@ class EventExtractor:
                 except Exception:
                     pass
 
-            logger.info(f"Raw Answer: {raw_answer}")
-            logger.info(f"Events: {events}")
+            logger.debug("Raw Answer: %s", raw_answer)
+            logger.debug("Events: %s", events)
             return events
             
         except Exception as e:

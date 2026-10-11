@@ -1,4 +1,4 @@
-from openai import OpenAI
+from openai import OpenAI, APITimeoutError, Timeout
 import os
 from typing import Dict, Any, Tuple
 from apps.helpers.decorators import retry
@@ -18,14 +18,20 @@ assert OPENAI_API_KEY, "Missing OpenAI api key"
 assert OPENAI_BASE_URL, "Missing OpenAI base url"
 assert OPENAI_MODEL, "Missing OpenAI model identifier"
 
+DEFAULT_REQUEST_TIMEOUT = 60.0
+DEFAULT_MAX_TOKENS = 2048
+
 CLIENT = OpenAI(
     base_url=OPENAI_BASE_URL,
-    api_key=OPENAI_API_KEY
+    api_key=OPENAI_API_KEY,
+    timeout=DEFAULT_REQUEST_TIMEOUT
 )
 
 def parse_llm_json(raw_response):
-    """Robustly parse JSON from LLM response, handling markdown code blocks."""
+    """Robustly parse JSON from LLM response, handling reasoning models (<think>...</think>) and markdown code blocks."""
     content = raw_response.strip()
+    if "</think>" in content:
+        content = content.split("</think>")[-1].strip()
     if "```json" in content:
         content = content.split("```json")[1].split("```")[0]
     elif "```" in content:
@@ -55,21 +61,40 @@ def parse_llm_json(raw_response):
     return json.loads(content.strip())
 
 
-@retry(max_attempts=3)
-def call_llm_json(system_prompt: str, user_prompt: str, **kwargs) -> Tuple[str, Dict[str, Any]]:
-    response = CLIENT.chat.completions.create(
-        model=OPENAI_MODEL,
-        messages=[
+@retry(max_attempts=3, exclude_exceptions=(APITimeoutError, Timeout, TimeoutError))
+def call_llm_json(
+    system_prompt: str,
+    user_prompt: str,
+    timeout: float = DEFAULT_REQUEST_TIMEOUT,
+    max_tokens: int = DEFAULT_MAX_TOKENS,
+    **kwargs
+) -> Tuple[str, Dict[str, Any]]:
+    create_kwargs = {
+        "model": OPENAI_MODEL,
+        "messages": [
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": user_prompt}
         ],
-        extra_body=kwargs
-    )
+        "timeout": timeout,
+        "max_tokens": max_tokens,
+    }
+    if "temperature" in kwargs:
+        create_kwargs["temperature"] = kwargs.pop("temperature")
+    if kwargs:
+        create_kwargs["extra_body"] = kwargs
+
+    response = CLIENT.chat.completions.create(**create_kwargs)
 
     return response.choices[0].message.content, parse_llm_json(response.choices[0].message.content)
 
 
-def make_llm_caller(model: str, base_url: str = None, api_key: str = None):
+def make_llm_caller(
+    model: str,
+    base_url: str = None,
+    api_key: str = None,
+    request_timeout: float = DEFAULT_REQUEST_TIMEOUT,
+    max_tokens: int = DEFAULT_MAX_TOKENS,
+):
     """
     Builds a call_llm_json-compatible function bound to a specific model identifier.
 
@@ -78,18 +103,32 @@ def make_llm_caller(model: str, base_url: str = None, api_key: str = None):
     vLLM server (base_url="http://localhost:8000/v1", api_key can be left as a dummy
     value since vLLM does not enforce it).
     """
-    client = CLIENT if base_url is None else OpenAI(base_url=base_url, api_key=api_key or "EMPTY")
+    client = CLIENT if base_url is None else OpenAI(
+        base_url=base_url,
+        api_key=api_key or "EMPTY",
+        timeout=request_timeout,
+    )
 
-    @retry(max_attempts=3)
+    @retry(max_attempts=3, exclude_exceptions=(APITimeoutError, Timeout, TimeoutError))
     def _call(system_prompt: str, user_prompt: str, **kwargs) -> Tuple[str, Dict[str, Any]]:
-        response = client.chat.completions.create(
-            model=model,
-            messages=[
+        call_timeout = kwargs.pop("timeout", request_timeout)
+        call_max_tokens = kwargs.pop("max_tokens", max_tokens)
+
+        create_kwargs = {
+            "model": model,
+            "messages": [
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": user_prompt}
             ],
-            extra_body=kwargs
-        )
+            "timeout": call_timeout,
+            "max_tokens": call_max_tokens,
+        }
+        if "temperature" in kwargs:
+            create_kwargs["temperature"] = kwargs.pop("temperature")
+        if kwargs:
+            create_kwargs["extra_body"] = kwargs
+
+        response = client.chat.completions.create(**create_kwargs)
 
         return response.choices[0].message.content, parse_llm_json(response.choices[0].message.content)
 

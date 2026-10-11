@@ -18,6 +18,10 @@ from apps.constants import (
     FINETUNED_EVENTS_SYSTEM_PROMPT,
     FINETUNED_ARGUMENTS_SYSTEM_PROMPT,
     FINETUNED_FULL_SYSTEM_PROMPT,
+    SHORT_ENTITIES_SYSTEM_PROMPT,
+    SHORT_EVENTS_SYSTEM_PROMPT,
+    SHORT_ARGUMENTS_SYSTEM_PROMPT,
+    SHORT_FULL_SYSTEM_PROMPT,
     MODEL_PRESETS,
 )
 from apps.extractors.entity_extractor import EntityExtractor
@@ -37,10 +41,12 @@ logger = logging.getLogger(__name__)
 # Each preset fully determines which system prompt to use, independent of where the
 # model is loaded from (local checkpoint path, served endpoint, or OpenRouter id).
 PROMPT_PRESETS: Dict[str, Dict[str, bool]] = {
-    "finetuned": {"fixed": True, "include_hints": False, "few_shot": False},
-    "instruction": {"fixed": False, "include_hints": False, "few_shot": False},
-    "instruction,type_hints": {"fixed": False, "include_hints": True, "few_shot": False},
-    "instruction,type_hints,few_shot": {"fixed": False, "include_hints": True, "few_shot": True},
+    "finetuned": {"fixed": True, "short": False, "include_hints": False, "few_shot": False},
+    "short": {"fixed": True, "short": True, "include_hints": False, "few_shot": False},
+    "json": {"fixed": True, "short": True, "include_hints": False, "few_shot": False},
+    "instruction": {"fixed": False, "short": False, "include_hints": False, "few_shot": False},
+    "instruction,type_hints": {"fixed": False, "short": False, "include_hints": True, "few_shot": False},
+    "instruction,type_hints,few_shot": {"fixed": False, "short": False, "include_hints": True, "few_shot": True},
 }
 
 CSV_FIELDNAMES = [
@@ -187,6 +193,7 @@ def _create_caller(
     base_url: Optional[str] = None,
     api_key: Optional[str] = None,
     max_seq_length: int = 2048,
+    request_timeout: float = 60.0,
 ) -> Tuple[Any, Optional[Any], str]:
     """
     Returns (caller, finetuned_model_instance, model_source).
@@ -199,13 +206,23 @@ def _create_caller(
 
     finetuned_model = None
     if is_served:
-        caller = make_llm_caller(model_name_or_path, base_url=base_url, api_key=api_key)
+        caller = make_llm_caller(
+            model_name_or_path,
+            base_url=base_url,
+            api_key=api_key,
+            request_timeout=request_timeout,
+            max_tokens=max_seq_length,
+        )
     elif is_local:
         from apps.trainers.inference_models import FinetunedModel
         finetuned_model = FinetunedModel(resolved_path, max_seq_length=max_seq_length)
         caller = finetuned_model._llm_call
     else:
-        caller = make_llm_caller(model_name_or_path)
+        caller = make_llm_caller(
+            model_name_or_path,
+            request_timeout=request_timeout,
+            max_tokens=max_seq_length,
+        )
 
     return caller, finetuned_model, model_source
 
@@ -216,20 +233,34 @@ def _build_extractor(
     use_fixed_prompt: bool,
     include_hints: bool,
     few_shot: bool,
+    short_prompt: bool = False,
 ) -> Any:
     if phase == "entity":
+        if short_prompt:
+            return EntityExtractor(llm_caller_func=caller, system_prompt=SHORT_ENTITIES_SYSTEM_PROMPT)
         if use_fixed_prompt:
             return EntityExtractor(llm_caller_func=caller, system_prompt=FINETUNED_ENTITIES_SYSTEM_PROMPT)
         return EntityExtractor(llm_caller_func=caller, include_hints=include_hints, few_shot=few_shot)
     elif phase == "event":
+        if short_prompt:
+            return EventExtractor(llm_caller_func=caller, system_prompt=SHORT_EVENTS_SYSTEM_PROMPT)
         if use_fixed_prompt:
             return EventExtractor(llm_caller_func=caller, system_prompt=FINETUNED_EVENTS_SYSTEM_PROMPT)
         return EventExtractor(llm_caller_func=caller, include_hints=include_hints, few_shot=few_shot)
     elif phase == "argument":
+        if short_prompt:
+            return ArgumentAssigner(
+                llm_caller_func=caller,
+                system_prompt=SHORT_ARGUMENTS_SYSTEM_PROMPT,
+                include_hints=False,
+                include_schema=False
+            )
         if use_fixed_prompt:
             return ArgumentAssigner(llm_caller_func=caller, system_prompt=FINETUNED_ARGUMENTS_SYSTEM_PROMPT)
         return ArgumentAssigner(llm_caller_func=caller, include_hints=include_hints, few_shot=few_shot)
     elif phase == "full":
+        if short_prompt:
+            return FullExtractor(llm_caller_func=caller, system_prompt=SHORT_FULL_SYSTEM_PROMPT)
         if use_fixed_prompt:
             return FullExtractor(llm_caller_func=caller, system_prompt=FINETUNED_FULL_SYSTEM_PROMPT)
         return FullExtractor(llm_caller_func=caller, include_hints=include_hints, few_shot=few_shot)
@@ -261,12 +292,18 @@ def _extract_pipeline_subphase(
     include_hints: bool,
     few_shot: bool,
     n_jobs: int,
+    request_timeout: float = 60.0,
+    short_prompt: bool = False,
 ) -> List[Any]:
     caller, ft_model, _ = _create_caller(
-        model_name_or_path, base_url=base_url, api_key=api_key, max_seq_length=max_seq_length
+        model_name_or_path,
+        base_url=base_url,
+        api_key=api_key,
+        max_seq_length=max_seq_length,
+        request_timeout=request_timeout,
     )
     try:
-        extractor = _build_extractor(subphase, caller, use_fixed_prompt, include_hints, few_shot)
+        extractor = _build_extractor(subphase, caller, use_fixed_prompt, include_hints, few_shot, short_prompt=short_prompt)
         sentences = [r.sentence for r in records]
         effective_n_jobs = 1 if ft_model is not None else n_jobs
         if effective_n_jobs > 1:
@@ -293,6 +330,7 @@ def run_evaluation(
     phases: Optional[List[str]] = None,
     base_url: Optional[str] = None,
     api_key: Optional[str] = None,
+    request_timeout: float = 60.0,
 ) -> List[Dict[str, Any]]:
     """
     Runs entity, event, argument, pipeline (entity -> event -> argument) and
@@ -313,6 +351,7 @@ def run_evaluation(
         raise ValueError(f"Unknown prompt preset {prompt!r}; choose from {sorted(PROMPT_PRESETS)}")
     preset = PROMPT_PRESETS[prompt]
     use_fixed_prompt, include_hints, few_shot = preset["fixed"], preset["include_hints"], preset["few_shot"]
+    short_prompt = preset.get("short", False)
 
     is_preset = eval_model in MODEL_PRESETS
     preset_mapping = MODEL_PRESETS[eval_model] if is_preset else None
@@ -373,7 +412,9 @@ def run_evaluation(
                     logger.info(f"Pipeline requires entity extraction: using preset entity checkpoint '{ent_target}'...")
                     entity_predictions = _extract_pipeline_subphase(
                         "entity", ent_target, dataset.items[:n_samples],
-                        base_url, api_key, max_seq_length, use_fixed_prompt, include_hints, few_shot, n_jobs
+                        base_url, api_key, max_seq_length, use_fixed_prompt, include_hints, few_shot, n_jobs,
+                        request_timeout=request_timeout,
+                        short_prompt=short_prompt,
                     )
                     ent_cache_file = os.path.join(output_dir, f"{model_slug}__entity__{run_timestamp}.jsonl")
                     _dump_rows(current_sentences, entity_predictions, [r.entities for r in dataset.items[:n_samples]], ent_cache_file)
@@ -383,7 +424,9 @@ def run_evaluation(
                     logger.info(f"Pipeline requires event extraction: using preset event checkpoint '{ev_target}'...")
                     event_predictions = _extract_pipeline_subphase(
                         "event", ev_target, dataset.items[:n_samples],
-                        base_url, api_key, max_seq_length, use_fixed_prompt, include_hints, few_shot, n_jobs
+                        base_url, api_key, max_seq_length, use_fixed_prompt, include_hints, few_shot, n_jobs,
+                        request_timeout=request_timeout,
+                        short_prompt=short_prompt,
                     )
                     ev_cache_file = os.path.join(output_dir, f"{model_slug}__event__{run_timestamp}.jsonl")
                     _dump_rows(current_sentences, event_predictions, [r.events for r in dataset.items[:n_samples]], ev_cache_file)
@@ -391,10 +434,14 @@ def run_evaluation(
                 arg_target = preset_mapping["argument"]
                 logger.info(f"Pipeline running argument assignment with preset checkpoint: '{arg_target}'...")
                 arg_caller, arg_ft_model, phase_source = _create_caller(
-                    arg_target, base_url=base_url, api_key=api_key, max_seq_length=max_seq_length
+                    arg_target,
+                    base_url=base_url,
+                    api_key=api_key,
+                    max_seq_length=max_seq_length,
+                    request_timeout=request_timeout,
                 )
                 try:
-                    arg_assigner = _build_extractor("argument", arg_caller, use_fixed_prompt, include_hints, few_shot)
+                    arg_assigner = _build_extractor("argument", arg_caller, use_fixed_prompt, include_hints, few_shot, short_prompt=short_prompt)
                     pipeline_extractor = PipelineExtractor(argument_assigner=arg_assigner)
                     pipeline_extractor.argument_assigner = arg_assigner
                     evaluator = PipelineEvaluator(extractor=pipeline_extractor)
@@ -414,12 +461,17 @@ def run_evaluation(
                 task_target = preset_mapping[phase]
                 logger.info(f"Phase '{phase}' running with preset checkpoint: '{task_target}'...")
                 phase_caller, phase_ft_model, phase_source = _create_caller(
-                    task_target, base_url=base_url, api_key=api_key, max_seq_length=max_seq_length
+                    task_target,
+                    base_url=base_url,
+                    api_key=api_key,
+                    max_seq_length=max_seq_length,
+                    request_timeout=request_timeout,
                 )
                 try:
-                    extractor = _build_extractor(phase, phase_caller, use_fixed_prompt, include_hints, few_shot)
+                    extractor = _build_extractor(phase, phase_caller, use_fixed_prompt, include_hints, few_shot, short_prompt=short_prompt)
                     evaluator = _build_evaluator(phase, extractor)
                     effective_n_jobs = 1 if phase_ft_model is not None else n_jobs
+
                     precision, recall, f1 = evaluator.evaluate(dataset, sample=sample, n_jobs=effective_n_jobs)
                     if phase == "entity":
                         entity_predictions = evaluator.last_predictions
@@ -458,17 +510,21 @@ def run_evaluation(
     else:
         # Non-preset flow: single model evaluated across all selected phases
         caller, finetuned_model, model_source = _create_caller(
-            eval_model, base_url=base_url, api_key=api_key, max_seq_length=max_seq_length
+            eval_model,
+            base_url=base_url,
+            api_key=api_key,
+            max_seq_length=max_seq_length,
+            request_timeout=request_timeout,
         )
         try:
             if finetuned_model is not None and n_jobs != 1:
                 logger.warning("Local checkpoint inference is not thread-safe; forcing n_jobs=1.")
                 n_jobs = 1
 
-            entity_extractor = _build_extractor("entity", caller, use_fixed_prompt, include_hints, few_shot)
-            event_extractor = _build_extractor("event", caller, use_fixed_prompt, include_hints, few_shot)
-            argument_assigner = _build_extractor("argument", caller, use_fixed_prompt, include_hints, few_shot)
-            full_extractor = _build_extractor("full", caller, use_fixed_prompt, include_hints, few_shot)
+            entity_extractor = _build_extractor("entity", caller, use_fixed_prompt, include_hints, few_shot, short_prompt=short_prompt)
+            event_extractor = _build_extractor("event", caller, use_fixed_prompt, include_hints, few_shot, short_prompt=short_prompt)
+            argument_assigner = _build_extractor("argument", caller, use_fixed_prompt, include_hints, few_shot, short_prompt=short_prompt)
+            full_extractor = _build_extractor("full", caller, use_fixed_prompt, include_hints, few_shot, short_prompt=short_prompt)
             pipeline_extractor = PipelineExtractor(
                 llm_caller_func=caller,
                 entity_extractor=entity_extractor,
