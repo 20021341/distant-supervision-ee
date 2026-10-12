@@ -43,3 +43,8 @@ timestamp,model,model_source,phase,sample_rate,n_samples,options,duration_second
 2026-10-10T22:10:16.355885+00:00,Qwen/Qwen3-4B-Instruct-2507,vllm,argument,1.0,4301,"instruction,type_hints,few_shot",1653.84,0.8421,0.7986,0.8198,eval_outputs/Qwen3-4B-Instruct-2507__instruction_type_hints_few_shot__argument__20261010T192032Z.jsonl
 2026-10-10T22:48:43.070499+00:00,Qwen/Qwen3-4B-Instruct-2507,vllm,pipeline,1.0,4301,"instruction,type_hints,few_shot",2306.67,0.2025,0.4865,0.286,eval_outputs/Qwen3-4B-Instruct-2507__instruction_type_hints_few_shot__pipeline__20261010T192032Z.jsonl
 2026-10-11T01:18:10.720306+00:00,Qwen/Qwen3-4B-Instruct-2507,vllm,full,1.0,4301,"instruction,type_hints,few_shot",8967.6,0.1907,0.417,0.2617,eval_outputs/Qwen3-4B-Instruct-2507__instruction_type_hints_few_shot__full__20261010T192032Z.jsonl
+2026-10-12T12:52:07.799743+00:00,entity-json-finetuned,vllm,entity,1.0,4301,json,72.53,0.4641,0.5898,0.5194,eval_outputs/entity-json-finetuned__json__entity__20261012T125055Z.jsonl
+2026-10-12T12:55:34.686842+00:00,event-json-finetuned,vllm,event,1.0,4301,json,53.84,0.5096,0.6601,0.5752,eval_outputs/event-json-finetuned__json__event__20261012T125440Z.jsonl
+2026-10-12T12:58:38.631664+00:00,argument-json-finetuned,vllm,argument,1.0,4301,json,50.69,0.8914,0.8809,0.8861,eval_outputs/argument-json-finetuned__json__argument__20261012T125747Z.jsonl
+2026-10-12T13:23:53.965222+00:00,argument-json-finetuned,vllm,pipeline,1.0,4301,json,57.5,0.4575,0.5446,0.4973,eval_outputs/argument-json-finetuned__json__pipeline__20261012T132256Z.jsonl
+2026-10-12T13:52:50.097107+00:00,full-json-finetuned,vllm,full,1.0,4301,json,167.88,0.4453,0.5512,0.4927,eval_outputs/full-json-finetuned__json__full__20261012T135002Z.jsonl
