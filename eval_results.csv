@@ -9,11 +9,11 @@ timestamp,model,model_source,phase,sample_rate,n_samples,options,duration_second
 2026-08-22T15:05:21.981469+00:00,stealth/ox-alpha,openrouter,argument,1.0,4301,"include_hints,few_shot",5147.68,0.844,0.9183,0.8796,eval_outputs/ox-alpha__argument__20260822T074841Z.jsonl
 2026-08-23T06:05:01.306994+00:00,stealth/ox-alpha,openrouter,pipeline,1.0,4301,"include_hints,few_shot",53979.27,0.1559,0.7598,0.2587,eval_outputs/ox-alpha__pipeline__20260822T074841Z.jsonl
 2026-08-23T11:49:02.078028+00:00,stealth/ox-alpha,openrouter,full,1.0,4301,"include_hints,few_shot",20640.72,0.1658,0.7414,0.2709,eval_outputs/ox-alpha__full__20260822T074841Z.jsonl
-2026-08-25T09:04:40.294200+00:00,entity-finetuned,vllm,entity,1.0,4301,n/a (finetuned checkpoint uses fixed system prompts),804.23,0.2593,0.6882,0.3767,eval_outputs/entity-finetuned__entity__20260825T085116Z.jsonl
-2026-08-24T09:18:19.000411+00:00,event-finetuned,vllm,event,1.0,4301,n/a (finetuned checkpoint uses fixed system prompts),721.69,0.4599,0.7333,0.5653,eval_outputs/event-finetuned__event__20260824T090617Z.jsonl
-2026-08-25T10:21:23.156992+00:00,argument-finetuned,vllm,argument,1.0,4301,n/a (finetuned checkpoint uses fixed system prompts),350.61,0.8617,0.9034,0.8821,eval_outputs/argument-finetuned__argument__20260825T101532Z.jsonl
-2026-08-25T15:25:56.791946+00:00,argument-finetuned,vllm,pipeline,1.0,4301,n/a (finetuned checkpoint uses fixed system prompts),601.55,0.3165,0.6317,0.4217,eval_outputs/argument-finetuned__pipeline__20260825T151555Z.jsonl
-2026-08-24T04:16:43.697890+00:00,full-finetuned,vllm,full,1.0,4301,n/a (finetuned checkpoint uses fixed system prompts),724.28,0.3729,0.5602,0.4478,eval_outputs/full-finetuned__full__20260824T040439Z.jsonl
+2026-08-25T09:04:40.294200+00:00,entity-finetuned,vllm,entity,1.0,4301,finetuned,804.23,0.4641,0.5898,0.5194,eval_outputs/entity-finetuned__entity__20260825T085116Z.jsonl
+2026-08-24T09:18:19.000411+00:00,event-finetuned,vllm,event,1.0,4301,finetuned,721.69,0.5096,0.6601,0.5752,eval_outputs/event-finetuned__event__20260824T090617Z.jsonl
+2026-08-25T10:21:23.156992+00:00,argument-finetuned,vllm,argument,1.0,4301,finetuned,350.61,0.8914,0.8809,0.8861,eval_outputs/argument-finetuned__argument__20260825T101532Z.jsonl
+2026-08-25T15:25:56.791946+00:00,argument-finetuned,vllm,pipeline,1.0,4301,finetuned,601.55,0.4575,0.5446,0.4973,eval_outputs/argument-finetuned__pipeline__20260825T151555Z.jsonl
+2026-08-24T04:16:43.697890+00:00,full-finetuned,vllm,full,1.0,4301,finetuned,724.28,0.4453,0.5512,0.4927,eval_outputs/full-finetuned__full__20260824T040439Z.jsonl
 2026-08-24T09:46:56.051013+00:00,google/gemma-4-31b-it,openrouter,entity,1.0,4301,"include_hints,few_shot",2692.53,0.1344,0.7747,0.2291,eval_outputs/gemma-4-31b-it__entity__20260824T090203Z.jsonl
 2026-08-24T10:19:43.689165+00:00,google/gemma-4-31b-it,openrouter,event,1.0,4301,"include_hints,few_shot",1967.61,0.3326,0.8099,0.4716,eval_outputs/gemma-4-31b-it__event__20260824T090203Z.jsonl
 2026-08-24T10:32:45.019590+00:00,google/gemma-4-31b-it,openrouter,argument,1.0,4301,"include_hints,few_shot",781.31,0.8489,0.9126,0.8796,eval_outputs/gemma-4-31b-it__argument__20260824T090203Z.jsonl
@@ -43,8 +43,8 @@ timestamp,model,model_source,phase,sample_rate,n_samples,options,duration_second
 2026-10-10T22:10:16.355885+00:00,Qwen/Qwen3-4B-Instruct-2507,vllm,argument,1.0,4301,"instruction,type_hints,few_shot",1653.84,0.8421,0.7986,0.8198,eval_outputs/Qwen3-4B-Instruct-2507__instruction_type_hints_few_shot__argument__20261010T192032Z.jsonl
 2026-10-10T22:48:43.070499+00:00,Qwen/Qwen3-4B-Instruct-2507,vllm,pipeline,1.0,4301,"instruction,type_hints,few_shot",2306.67,0.2025,0.4865,0.286,eval_outputs/Qwen3-4B-Instruct-2507__instruction_type_hints_few_shot__pipeline__20261010T192032Z.jsonl
 2026-10-11T01:18:10.720306+00:00,Qwen/Qwen3-4B-Instruct-2507,vllm,full,1.0,4301,"instruction,type_hints,few_shot",8967.6,0.1907,0.417,0.2617,eval_outputs/Qwen3-4B-Instruct-2507__instruction_type_hints_few_shot__full__20261010T192032Z.jsonl
-2026-10-12T12:52:07.799743+00:00,entity-json-finetuned,vllm,entity,1.0,4301,json,72.53,0.4641,0.5898,0.5194,eval_outputs/entity-json-finetuned__json__entity__20261012T125055Z.jsonl
-2026-10-12T12:55:34.686842+00:00,event-json-finetuned,vllm,event,1.0,4301,json,53.84,0.5096,0.6601,0.5752,eval_outputs/event-json-finetuned__json__event__20261012T125440Z.jsonl
-2026-10-12T12:58:38.631664+00:00,argument-json-finetuned,vllm,argument,1.0,4301,json,50.69,0.8914,0.8809,0.8861,eval_outputs/argument-json-finetuned__json__argument__20261012T125747Z.jsonl
-2026-10-12T13:23:53.965222+00:00,argument-json-finetuned,vllm,pipeline,1.0,4301,json,57.5,0.4575,0.5446,0.4973,eval_outputs/argument-json-finetuned__json__pipeline__20261012T132256Z.jsonl
-2026-10-12T13:52:50.097107+00:00,full-json-finetuned,vllm,full,1.0,4301,json,167.88,0.4453,0.5512,0.4927,eval_outputs/full-json-finetuned__json__full__20261012T135002Z.jsonl
+2026-10-12T12:52:07.799743+00:00,entity-json-finetuned,vllm,entity,1.0,4301,json,72.53,0.2593,0.6882,0.3767,eval_outputs/entity-json-finetuned__json__entity__20261012T125055Z.jsonl
+2026-10-12T12:55:34.686842+00:00,event-json-finetuned,vllm,event,1.0,4301,json,53.84,0.4599,0.7333,0.5653,eval_outputs/event-json-finetuned__json__event__20261012T125440Z.jsonl
+2026-10-12T12:58:38.631664+00:00,argument-json-finetuned,vllm,argument,1.0,4301,json,50.69,0.8617,0.9034,0.8821,eval_outputs/argument-json-finetuned__json__argument__20261012T125747Z.jsonl
+2026-10-12T13:23:53.965222+00:00,argument-json-finetuned,vllm,pipeline,1.0,4301,json,57.5,0.3165,0.6317,0.4217,eval_outputs/argument-json-finetuned__json__pipeline__20261012T132256Z.jsonl
+2026-10-12T13:52:50.097107+00:00,full-json-finetuned,vllm,full,1.0,4301,json,167.88,0.3729,0.5602,0.4478,eval_outputs/full-json-finetuned__json__full__20261012T135002Z.jsonl
