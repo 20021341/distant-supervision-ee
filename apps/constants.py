@@ -1142,11 +1142,11 @@ MODEL_PRESETS = {
         "argument": "checkpoints/argument/final",
         "full": "checkpoints/full/final",
     },
-    "json-inetuned": {
-        "entity": "checkpoints/entity",
-        "event": "checkpoints/event",
-        "argument": "checkpoints/argument",
-        "full": "checkpoints/full",
+    "json-finetuned": {
+        "entity": "checkpoints/entity-json/final",
+        "event": "checkpoints/event-json/final",
+        "argument": "checkpoints/argument-json/final",
+        "full": "checkpoints/full-json/final",
     },
 }
 
